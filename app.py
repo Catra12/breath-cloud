@@ -1,35 +1,52 @@
 from flask import Flask, request, jsonify
+import math
 
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "ESP32 Cloud Running"
+    return """
+    <h1>Breath Cloud Server</h1>
+    <p>Server Status: Online</p>
+
+    <ul>
+        <li>GET /status</li>
+        <li>POST /posture</li>
+    </ul>
+    """
+
+@app.route("/status")
+def status():
+    return jsonify({
+        "server": "online",
+        "url": "https://breath-cloud.onrender.com"
+    })
 
 @app.route("/posture", methods=["POST"])
 def posture():
 
-    data = request.get_json(force=True, silent=True)
+    data = request.get_json()
 
-    if data is None:
-        return jsonify({"error": "Invalid or missing JSON body"}), 400
+    ax = float(data.get("ax", 0))
+    ay = float(data.get("ay", 0))
+    az = float(data.get("az", 0))
 
-    ax = data.get("ax", 0)
-    ay = data.get("ay", 0)
-    az = data.get("az", 0)
-
-    result = "UNKNOWN"
-
-    if az > 8:
-        result = "STANDING"
-    elif ay > 8:
-        result = "LYING"
-    elif ax > 8:
-        result = "SIDE"
+    if abs(az) > 8:
+        posture = "UPRIGHT"
+    elif abs(ay) > 8:
+        posture = "LYING"
+    elif abs(ax) > 8:
+        posture = "SIDE"
+    else:
+        posture = "MOVING"
 
     return jsonify({
-        "posture": result
+        "success": True,
+        "posture": posture,
+        "ax": ax,
+        "ay": ay,
+        "az": az
     })
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=5000)
