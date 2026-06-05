@@ -9,15 +9,13 @@ app = Flask(__name__)
 
 latest_data = {
     "posture": "WAITING",
-
-    "ax": 0,
-    "ay": 0,
-    "az": 0,
-
-    "gx": 0,
-    "gy": 0,
-    "gz": 0,
-
+    "bpm": "WAITING",
+    "ax": 0.0,
+    "ay": 0.0,
+    "az": 0.0,
+    "gx": 0.0,
+    "gy": 0.0,
+    "gz": 0.0,
     "time": "-"
 }
 
@@ -25,111 +23,208 @@ latest_data = {
 # THUẬT TOÁN PHÂN LOẠI TƯ THẾ
 # =====================================
 
-def detect_posture(ax, ay, az):
+def detect_posture(ax: float, ay: float, az: float) -> str:
+    """
+    Phân loại tư thế dựa trên dữ liệu gia tốc.
+    Trả về: NAM | NAM_NGHIENG | DUNG | NGOI
+    """
+    G = 1.0
+    THRESHOLD = 0.2
+    SIDE_LIMIT = 0.4
 
-    g = 1.0
-    threshold = 0.2
-
-    # Nằm
-    if (
-        abs(az - g) < threshold and
-        abs(ax) < 0.4 and
-        abs(ay) < 0.4
-    ):
+    # Nằm ngửa (az ≈ 1g)
+    if abs(az - G) < THRESHOLD and abs(ax) < SIDE_LIMIT and abs(ay) < SIDE_LIMIT:
         return "NAM"
 
-    # Nằm nghiêng
-    elif (
-        abs(ay - g) < threshold and
-        abs(ax) < 0.4 and
-        abs(az) < 0.4
-    ):
+    # Nằm nghiêng (ay ≈ 1g)
+    if abs(ay - G) < THRESHOLD and abs(ax) < SIDE_LIMIT and abs(az) < SIDE_LIMIT:
         return "NAM_NGHIENG"
 
-    # Đứng
-    elif (
-        abs(ax - g) < threshold and
-        abs(ay) < 0.4 and
-        abs(az) < 0.4
-    ):
+    # Đứng (ax ≈ 1g)
+    if abs(ax - G) < THRESHOLD and abs(ay) < SIDE_LIMIT and abs(az) < SIDE_LIMIT:
         return "DUNG"
 
-    # Ngồi
-    else:
-        return "NGOI"
+    # Mặc định: ngồi
+    return "NGOI"
 
 # =====================================
 # DASHBOARD
 # =====================================
 
-@app.route("/")
-def home():
-
-    return f"""
-    <html>
-
-    <head>
-
-        <title>Breath AI Cloud</title>
-
-        <meta http-equiv="refresh" content="1">
-
-        <style>
+DASHBOARD_HTML = """
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Breath AI Cloud</title>
+    <meta http-equiv="refresh" content="1">
+    <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 
         body {{
-            font-family: Arial;
-            text-align: center;
-            margin-top: 40px;
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            padding: 30px 16px;
         }}
 
         .card {{
-            width: 500px;
-            margin: auto;
+            width: 100%;
+            max-width: 720px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }}
+
+        .card-header {{
+            background: #1a7f3c;
+            color: white;
             padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 10px;
+            text-align: center;
         }}
 
-        h1 {{
-            color: green;
+        .card-header h1 {{
+            font-size: 26px;
+            letter-spacing: 1px;
         }}
 
-        </style>
+        .card-header p {{
+            font-size: 13px;
+            opacity: 0.8;
+            margin-top: 4px;
+        }}
 
-    </head>
+        .card-body {{
+            padding: 24px;
+        }}
 
-    <body>
+        .section {{
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f9f9f9;
+            border-radius: 8px;
+            border-left: 4px solid #1a7f3c;
+        }}
 
-        <h1>🚀 Breath AI Cloud</h1>
+        .section-title {{
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #888;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }}
 
-        <div class="card">
+        .section-value {{
+            font-size: 32px;
+            font-weight: bold;
+            color: #1a7f3c;
+        }}
 
-            <h2>Tư thế hiện tại</h2>
+        .grid {{
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }}
 
-            <h1>{latest_data["posture"]}</h1>
+        .metric {{
+            background: #f9f9f9;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }}
 
-            <hr>
+        .metric-label {{
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 4px;
+        }}
 
-            <p>AX = {latest_data["ax"]}</p>
-            <p>AY = {latest_data["ay"]}</p>
-            <p>AZ = {latest_data["az"]}</p>
+        .metric-value {{
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+        }}
 
-            <p>GX = {latest_data["gx"]}</p>
-            <p>GY = {latest_data["gy"]}</p>
-            <p>GZ = {latest_data["gz"]}</p>
+        .footer {{
+            text-align: center;
+            font-size: 13px;
+            color: #bbb;
+            padding: 16px;
+            border-top: 1px solid #eee;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="card-header">
+            <h1>🚀 Breath AI Cloud</h1>
+            <p>Real-time Posture &amp; Breath Monitor</p>
+        </div>
 
-            <hr>
+        <div class="card-body">
 
-            <p>Cập nhật lần cuối:</p>
+            <div class="section">
+                <div class="section-title">Tư thế hiện tại</div>
+                <div class="section-value">{posture}</div>
+            </div>
 
-            <b>{latest_data["time"]}</b>
+            <div class="section">
+                <div class="section-title">Nhịp thở (AI)</div>
+                <div class="section-value">{bpm}</div>
+            </div>
+
+            <p style="font-size:13px;color:#888;margin-bottom:10px;font-weight:bold;">
+                Accelerometer (g)
+            </p>
+            <div class="grid" style="margin-bottom:20px;">
+                <div class="metric">
+                    <div class="metric-label">AX</div>
+                    <div class="metric-value">{ax}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">AY</div>
+                    <div class="metric-value">{ay}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">AZ</div>
+                    <div class="metric-value">{az}</div>
+                </div>
+            </div>
+
+            <p style="font-size:13px;color:#888;margin-bottom:10px;font-weight:bold;">
+                Gyroscope (°/s)
+            </p>
+            <div class="grid">
+                <div class="metric">
+                    <div class="metric-label">GX</div>
+                    <div class="metric-value">{gx}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">GY</div>
+                    <div class="metric-value">{gy}</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">GZ</div>
+                    <div class="metric-value">{gz}</div>
+                </div>
+            </div>
 
         </div>
 
-    </body>
+        <div class="footer">
+            Cập nhật lần cuối: <strong>{time}</strong>
+        </div>
+    </div>
+</body>
+</html>
+"""
 
-    </html>
-    """
+@app.route("/")
+def home():
+    return DASHBOARD_HTML.format(**latest_data)
 
 # =====================================
 # STATUS
@@ -137,10 +232,10 @@ def home():
 
 @app.route("/status")
 def status():
-
     return jsonify({
         "server": "online",
-        "posture": latest_data["posture"]
+        "posture": latest_data["posture"],
+        "bpm": latest_data["bpm"]
     })
 
 # =====================================
@@ -149,7 +244,6 @@ def status():
 
 @app.route("/current")
 def current():
-
     return jsonify(latest_data)
 
 # =====================================
@@ -158,64 +252,55 @@ def current():
 
 @app.route("/posture", methods=["POST"])
 def posture():
-
     global latest_data
 
     try:
-
-        data = request.get_json()
+        data = request.get_json(force=True)
 
         ax = float(data.get("ax", 0))
         ay = float(data.get("ay", 0))
         az = float(data.get("az", 0))
-
         gx = float(data.get("gx", 0))
         gy = float(data.get("gy", 0))
         gz = float(data.get("gz", 0))
 
-        posture_result = detect_posture(
-            ax,
-            ay,
-            az
-        )
+        posture_result = detect_posture(ax, ay, az)
 
         latest_data = {
             "posture": posture_result,
-
+            "bpm": "WAITING",          # AI chưa bật
             "ax": round(ax, 3),
             "ay": round(ay, 3),
             "az": round(az, 3),
-
             "gx": round(gx, 3),
             "gy": round(gy, 3),
             "gz": round(gz, 3),
-
-            "time": datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-        print(latest_data)
+        print("[DATA]", latest_data)
 
         return jsonify({
             "success": True,
-            "posture": posture_result
+            "posture": posture_result,
+            "bpm": latest_data["bpm"]
         })
 
     except Exception as e:
+        print("[ERROR]", str(e))
+        return jsonify({"success": False, "error": str(e)}), 400
 
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 400
+# =====================================
+# TEST
+# =====================================
+
+@app.route("/test")
+def test():
+    return jsonify({"success": True, "message": "Cloud Running"})
 
 # =====================================
 # MAIN
 # =====================================
 
 if __name__ == "__main__":
-
-    app.run(
-        host="0.0.0.0",
-        port=5000
-    )
+    app.run(host="0.0.0.0", port=5000, debug=True)
