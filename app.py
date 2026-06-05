@@ -1,61 +1,82 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
+import math
 
 app = Flask(__name__)
 
-# ==========================
-# BIẾN TOÀN CỤC
-# ==========================
+# =====================================
+# LƯU DỮ LIỆU MỚI NHẤT
+# =====================================
 
 latest_data = {
-    "posture": "UNKNOWN",
+    "posture": "WAITING",
+    "pitch": 0,
+    "roll": 0,
+
     "ax": 0,
     "ay": 0,
     "az": 0,
+
     "gx": 0,
     "gy": 0,
     "gz": 0,
+
     "time": "-"
 }
 
 
-# ==========================
+# =====================================
 # THUẬT TOÁN TƯ THẾ
-# ==========================
+# =====================================
 
 def detect_posture(ax, ay, az):
 
-    g = 1.0
-    threshold = 0.2
+    pitch = math.degrees(
+        math.atan2(
+            ax,
+            math.sqrt(
+                ay * ay +
+                az * az
+            )
+        )
+    )
 
-    if (
-        abs(az - g) < threshold
-        and abs(ax) < 0.4
-        and abs(ay) < 0.4
-    ):
-        return "NAM"
+    roll = math.degrees(
+        math.atan2(
+            ay,
+            math.sqrt(
+                ax * ax +
+                az * az
+            )
+        )
+    )
 
-    elif (
-        abs(ay - g) < threshold
-        and abs(ax) < 0.4
-        and abs(az) < 0.4
-    ):
-        return "NAM_NGHIENG"
+    # =========================
+    # PHÂN LOẠI
+    # =========================
 
-    elif (
-        abs(ax - g) < threshold
-        and abs(ay) < 0.4
-        and abs(az) < 0.4
-    ):
-        return "DUNG"
+    if abs(pitch) < 20 and abs(roll) < 20:
+
+        posture = "DUNG"
+
+    elif abs(pitch) > 45:
+
+        posture = "NAM"
+
+    elif abs(roll) > 45:
+
+        posture = "NAM_NGHIENG"
 
     else:
-        return "NGOI"
+
+        posture = "NGOI"
+
+    return posture, pitch, roll
 
 
-# ==========================
-# HOME PAGE
-# ==========================
+# =====================================
+# DASHBOARD
+# =====================================
 
 @app.route("/")
 def home():
@@ -67,7 +88,7 @@ def home():
 
         <title>Breath AI Cloud</title>
 
-        <meta http-equiv="refresh" content="2">
+        <meta http-equiv="refresh" content="1">
 
         <style>
 
@@ -78,7 +99,7 @@ def home():
         }}
 
         .card {{
-            width: 400px;
+            width: 500px;
             margin: auto;
             padding: 20px;
             border: 1px solid #ccc;
@@ -105,6 +126,11 @@ def home():
 
             <hr>
 
+            <h3>Pitch = {latest_data["pitch"]}°</h3>
+            <h3>Roll = {latest_data["roll"]}°</h3>
+
+            <hr>
+
             <p>AX = {latest_data["ax"]}</p>
             <p>AY = {latest_data["ay"]}</p>
             <p>AZ = {latest_data["az"]}</p>
@@ -116,6 +142,7 @@ def home():
             <hr>
 
             <p>Cập nhật lần cuối:</p>
+
             <b>{latest_data["time"]}</b>
 
         </div>
@@ -126,9 +153,9 @@ def home():
     """
 
 
-# ==========================
-# STATUS
-# ==========================
+# =====================================
+# API STATUS
+# =====================================
 
 @app.route("/status")
 def status():
@@ -139,9 +166,9 @@ def status():
     })
 
 
-# ==========================
-# CURRENT DATA
-# ==========================
+# =====================================
+# API DỮ LIỆU HIỆN TẠI
+# =====================================
 
 @app.route("/current")
 def current():
@@ -149,9 +176,9 @@ def current():
     return jsonify(latest_data)
 
 
-# ==========================
-# ESP32 POST DATA
-# ==========================
+# =====================================
+# API NHẬN DỮ LIỆU ESP32
+# =====================================
 
 @app.route("/posture", methods=["POST"])
 def posture():
@@ -170,7 +197,7 @@ def posture():
         gy = float(data.get("gy", 0))
         gz = float(data.get("gz", 0))
 
-        posture_result = detect_posture(
+        posture_result, pitch, roll = detect_posture(
             ax,
             ay,
             az
@@ -179,6 +206,9 @@ def posture():
         latest_data = {
 
             "posture": posture_result,
+
+            "pitch": round(pitch, 2),
+            "roll": round(roll, 2),
 
             "ax": round(ax, 3),
             "ay": round(ay, 3),
@@ -199,7 +229,11 @@ def posture():
 
             "success": True,
 
-            "posture": posture_result
+            "posture": posture_result,
+
+            "pitch": round(pitch, 2),
+
+            "roll": round(roll, 2)
 
         })
 
@@ -214,9 +248,9 @@ def posture():
         }), 400
 
 
-# ==========================
+# =====================================
 # MAIN
-# ==========================
+# =====================================
 
 if __name__ == "__main__":
 
