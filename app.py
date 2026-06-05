@@ -31,47 +31,16 @@ latest_data = {
 
 def detect_posture(ax, ay, az):
 
-    pitch = math.degrees(
-        math.atan2(
-            ax,
-            math.sqrt(
-                ay * ay +
-                az * az
-            )
-        )
-    )
+    eps = 0.25
 
-    roll = math.degrees(
-        math.atan2(
-            ay,
-            math.sqrt(
-                ax * ax +
-                az * az
-            )
-        )
-    )
+    if abs(az - 1.0) < eps:
+        return "NAM"
 
-    # =========================
-    # PHÂN LOẠI
-    # =========================
-
-    if abs(pitch) < 20 and abs(roll) < 20:
-
-        posture = "DUNG"
-
-    elif abs(pitch) > 45:
-
-        posture = "NAM"
-
-    elif abs(roll) > 45:
-
-        posture = "NAM_NGHIENG"
+    elif abs(ax - 1.0) < eps:
+        return "DUNG"
 
     else:
-
-        posture = "NGOI"
-
-    return posture, pitch, roll
+        return "NGOI"
 
 
 # =====================================
