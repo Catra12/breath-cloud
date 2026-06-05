@@ -27,14 +27,31 @@ latest_data = {
 
 def detect_posture(ax, ay, az):
 
-    eps = 0.25
+    g = 1.0
+    threshold = 0.2
 
     # Nằm
-    if abs(az - 1.0) < eps:
+    if (
+        abs(az - g) < threshold and
+        abs(ax) < 0.4 and
+        abs(ay) < 0.4
+    ):
         return "NAM"
 
+    # Nằm nghiêng
+    elif (
+        abs(ay - g) < threshold and
+        abs(ax) < 0.4 and
+        abs(az) < 0.4
+    ):
+        return "NAM_NGHIENG"
+
     # Đứng
-    elif abs(ax - 1.0) < eps:
+    elif (
+        abs(ax - g) < threshold and
+        abs(ay) < 0.4 and
+        abs(az) < 0.4
+    ):
         return "DUNG"
 
     # Ngồi
