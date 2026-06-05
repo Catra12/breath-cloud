@@ -4,43 +4,45 @@ from datetime import datetime
 import numpy as np
 import tensorflow as tf
 import joblib
-import os
-import math
 
 app = Flask(__name__)
 
 # ==================================================
-# LOAD AI MODEL
+# AI MODEL
 # ==================================================
 
-MODEL_PATH = "modelAI/best_breath_v3.keras"
-SCALER_PATH = "modelAI/breath_scaler_v3.joblib"
-
-model = None
-scaler = None
+MODEL_OK = False
 
 try:
-    model = tf.keras.models.load_model(MODEL_PATH)
-    scaler = joblib.load(SCALER_PATH)
+    model = tf.keras.models.load_model(
+        "modelAI/best_breath_v3.keras",
+        compile=False
+    )
 
-    print("===================================")
-    print("AI MODEL LOADED")
-    print(MODEL_PATH)
-    print("===================================")
+    scaler = joblib.load(
+        "modelAI/breath_scaler_v3.joblib"
+    )
+
+    MODEL_OK = True
+
+    print("=" * 50)
+    print("AI MODEL LOADED SUCCESS")
+    print("=" * 50)
 
 except Exception as e:
-    print("===================================")
+
+    print("=" * 50)
     print("AI LOAD FAILED")
-    print(str(e))
-    print("===================================")
+    print(e)
+    print("=" * 50)
 
 # ==================================================
-# BUFFER AI
+# CONFIG
 # ==================================================
 
 WINDOW_SIZE = 500
 
-window_buffer = []
+buffer = []
 
 # ==================================================
 # DATA
@@ -58,9 +60,6 @@ latest_data = {
     "gy": 0,
     "gz": 0,
 
-    "acc_mag": 0,
-    "gyro_mag": 0,
-
     "time": "-"
 }
 
@@ -70,27 +69,27 @@ latest_data = {
 
 def detect_posture(ax, ay, az):
 
-    G = 1.0
-    TH = 0.2
+    g = 1.0
+    threshold = 0.2
 
     if (
-        abs(az - G) < TH and
-        abs(ax) < 0.4 and
-        abs(ay) < 0.4
+        abs(az - g) < threshold
+        and abs(ax) < 0.4
+        and abs(ay) < 0.4
     ):
         return "NAM"
 
     elif (
-        abs(ay - G) < TH and
-        abs(ax) < 0.4 and
-        abs(az) < 0.4
+        abs(ay - g) < threshold
+        and abs(ax) < 0.4
+        and abs(az) < 0.4
     ):
         return "NAM_NGHIENG"
 
     elif (
-        abs(ax - G) < TH and
-        abs(ay) < 0.4 and
-        abs(az) < 0.4
+        abs(ax - g) < threshold
+        and abs(ay) < 0.4
+        and abs(az) < 0.4
     ):
         return "DUNG"
 
@@ -102,17 +101,15 @@ def detect_posture(ax, ay, az):
 
 def predict_bpm():
 
-    global window_buffer
+    if not MODEL_OK:
+        return "AI_FAILED"
 
-    if model is None:
-        return "AI_ERROR"
-
-    if scaler is None:
-        return "SCALER_ERROR"
+    if len(buffer) < WINDOW_SIZE:
+        return f"BUFFER {len(buffer)}/{WINDOW_SIZE}"
 
     try:
 
-        data = np.array(window_buffer)
+        data = np.array(buffer[-WINDOW_SIZE:])
 
         scaled = scaler.transform(data)
 
@@ -125,99 +122,99 @@ def predict_bpm():
         pred = model.predict(
             scaled,
             verbose=0
+        )[0][0]
+
+        pred = float(
+            np.clip(pred, 12, 20)
         )
 
-        bpm = float(pred[0][0])
-
-        bpm = max(
-            8,
-            min(40, bpm)
-        )
-
-        return round(bpm, 2)
+        return round(pred, 1)
 
     except Exception as e:
 
-        print("PREDICT ERROR:", str(e))
+        print("AI ERROR:", e)
 
-        return "ERROR"
+        return "AI_ERROR"
 
 # ==================================================
 # DASHBOARD
 # ==================================================
 
-HTML = """
+@app.route("/")
+def home():
+
+    return f"""
 <!DOCTYPE html>
+
 <html>
 
 <head>
 
 <meta charset="utf-8">
 
-<title>Breath AI Cloud</title>
-
 <meta http-equiv="refresh" content="1">
+
+<title>Breath AI Cloud</title>
 
 <style>
 
-body{
-font-family:Arial;
-background:#f2f2f2;
-padding:30px;
-}
+body {{
+    font-family: Arial;
+    background:#f2f2f2;
+    text-align:center;
+}}
 
-.card{
-max-width:900px;
-margin:auto;
-background:white;
-border-radius:15px;
-overflow:hidden;
-box-shadow:0 0 15px rgba(0,0,0,0.1);
-}
+.card {{
+    width:800px;
+    margin:auto;
+    margin-top:30px;
+    background:white;
+    border-radius:10px;
+    overflow:hidden;
+}}
 
-.header{
-background:#1f8b3f;
-color:white;
-padding:25px;
-text-align:center;
-}
+.header {{
+    background:#188038;
+    color:white;
+    padding:20px;
+}}
 
-.content{
-padding:25px;
-}
+.section {{
+    margin:20px;
+    padding:20px;
+    background:#fafafa;
+    border-left:5px solid green;
+    text-align:left;
+}}
 
-.box{
-background:#f7f7f7;
-padding:20px;
-margin-bottom:15px;
-border-left:5px solid green;
-border-radius:10px;
-}
+.big {{
+    font-size:50px;
+    color:green;
+    font-weight:bold;
+}}
 
-.value{
-font-size:40px;
-font-weight:bold;
-color:green;
-}
+.grid {{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin:20px;
+}}
 
-.grid{
-display:grid;
-grid-template-columns:repeat(3,1fr);
-gap:10px;
-}
+.box {{
+    background:#f7f7f7;
+    padding:20px;
+    border-radius:10px;
+}}
 
-.metric{
-background:#f7f7f7;
-padding:15px;
-border-radius:10px;
-text-align:center;
-}
+.value {{
+    font-size:28px;
+    font-weight:bold;
+}}
 
-.footer{
-padding:20px;
-text-align:center;
-color:gray;
-}
+.footer {{
+    padding:20px;
+    color:gray;
+}}
 
 </style>
 
@@ -235,60 +232,56 @@ color:gray;
 
 </div>
 
-<div class="content">
-
-<div class="box">
+<div class="section">
 
 <h3>TƯ THẾ HIỆN TẠI</h3>
 
-<div class="value">{posture}</div>
+<div class="big">
+{latest_data["posture"]}
+</div>
 
+</div>
+
+<div class="section">
+
+<h3>NHỊP THỞ (AI)</h3>
+
+<div class="big">
+{latest_data["bpm"]}
+</div>
+
+</div>
+
+<div class="grid">
+
+<div class="box">
+AX
+<div class="value">{latest_data["ax"]}</div>
 </div>
 
 <div class="box">
-
-<h3>NHỊP THỞ AI</h3>
-
-<div class="value">{bpm}</div>
-
+AY
+<div class="value">{latest_data["ay"]}</div>
 </div>
 
-<h3>Accelerometer</h3>
-
-<div class="grid">
-
-<div class="metric">
-AX<br><b>{ax}</b>
+<div class="box">
+AZ
+<div class="value">{latest_data["az"]}</div>
 </div>
 
-<div class="metric">
-AY<br><b>{ay}</b>
+<div class="box">
+GX
+<div class="value">{latest_data["gx"]}</div>
 </div>
 
-<div class="metric">
-AZ<br><b>{az}</b>
+<div class="box">
+GY
+<div class="value">{latest_data["gy"]}</div>
 </div>
 
-</div>
-
-<br>
-
-<h3>Gyroscope</h3>
-
-<div class="grid">
-
-<div class="metric">
-GX<br><b>{gx}</b>
-</div>
-
-<div class="metric">
-GY<br><b>{gy}</b>
-</div>
-
-<div class="metric">
-GZ<br><b>{gz}</b>
-</div>
-
+<div class="box">
+GZ
+<div class="value">{latest_data["gz"]}</div>
 </div>
 
 </div>
@@ -296,7 +289,7 @@ GZ<br><b>{gz}</b>
 <div class="footer">
 
 Last Update:
-{time}
+{latest_data["time"]}
 
 </div>
 
@@ -307,10 +300,6 @@ Last Update:
 </html>
 """
 
-@app.route("/")
-def home():
-    return HTML.format(**latest_data)
-
 # ==================================================
 # STATUS
 # ==================================================
@@ -320,6 +309,7 @@ def status():
 
     return jsonify({
         "server": "online",
+        "model": MODEL_OK,
         "posture": latest_data["posture"],
         "bpm": latest_data["bpm"]
     })
@@ -330,7 +320,21 @@ def status():
 
 @app.route("/current")
 def current():
+
     return jsonify(latest_data)
+
+# ==================================================
+# TEST
+# ==================================================
+
+@app.route("/test")
+def test():
+
+    return jsonify({
+        "success": True,
+        "message": "Cloud Running",
+        "model_loaded": MODEL_OK
+    })
 
 # ==================================================
 # POSTURE API
@@ -340,7 +344,6 @@ def current():
 def posture():
 
     global latest_data
-    global window_buffer
 
     try:
 
@@ -354,25 +357,25 @@ def posture():
         gy = float(data.get("gy", 0))
         gz = float(data.get("gz", 0))
 
-        acc_mag = math.sqrt(
-            ax*ax +
-            ay*ay +
-            az*az
-        )
-
-        gyro_mag = math.sqrt(
-            gx*gx +
-            gy*gy +
-            gz*gz
-        )
-
         posture_result = detect_posture(
             ax,
             ay,
             az
         )
 
-        feature = [
+        acc_mag = np.sqrt(
+            ax**2 +
+            ay**2 +
+            az**2
+        )
+
+        gyro_mag = np.sqrt(
+            gx**2 +
+            gy**2 +
+            gz**2
+        )
+
+        feature_row = [
             ax,
             ay,
             az,
@@ -383,70 +386,48 @@ def posture():
             gyro_mag
         ]
 
-        window_buffer.append(feature)
+        buffer.append(feature_row)
 
-        if len(window_buffer) > WINDOW_SIZE:
-            window_buffer.pop(0)
+        if len(buffer) > WINDOW_SIZE:
+            buffer.pop(0)
 
-        bpm_value = "WAITING"
-
-        if len(window_buffer) == WINDOW_SIZE:
-            bpm_value = predict_bpm()
+        bpm = predict_bpm()
 
         latest_data = {
 
             "posture": posture_result,
-            "bpm": bpm_value,
+            "bpm": bpm,
 
-            "ax": round(ax,3),
-            "ay": round(ay,3),
-            "az": round(az,3),
+            "ax": round(ax, 3),
+            "ay": round(ay, 3),
+            "az": round(az, 3),
 
-            "gx": round(gx,3),
-            "gy": round(gy,3),
-            "gz": round(gz,3),
-
-            "acc_mag": round(acc_mag,3),
-            "gyro_mag": round(gyro_mag,3),
+            "gx": round(gx, 3),
+            "gy": round(gy, 3),
+            "gz": round(gz, 3),
 
             "time": datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S"
             )
         }
 
-        print(
-            "POSTURE:",
-            posture_result,
-            "BPM:",
-            bpm_value
-        )
+        print(latest_data)
 
         return jsonify({
             "success": True,
             "posture": posture_result,
-            "bpm": bpm_value
+            "bpm": bpm,
+            "buffer": len(buffer)
         })
 
     except Exception as e:
 
-        print("ERROR:", str(e))
+        print(e)
 
         return jsonify({
             "success": False,
             "error": str(e)
         }), 400
-
-# ==================================================
-# TEST
-# ==================================================
-
-@app.route("/test")
-def test():
-
-    return jsonify({
-        "success": True,
-        "message": "Cloud Running"
-    })
 
 # ==================================================
 # MAIN
