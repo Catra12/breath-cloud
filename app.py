@@ -1,17 +1,14 @@
 from flask import Flask, request, jsonify
 from datetime import datetime
-import math
 
 app = Flask(__name__)
 
 # =====================================
-# LƯU DỮ LIỆU MỚI NHẤT
+# DỮ LIỆU MỚI NHẤT
 # =====================================
 
 latest_data = {
     "posture": "WAITING",
-    "pitch": 0,
-    "roll": 0,
 
     "ax": 0,
     "ay": 0,
@@ -24,24 +21,25 @@ latest_data = {
     "time": "-"
 }
 
-
 # =====================================
-# THUẬT TOÁN TƯ THẾ
+# THUẬT TOÁN PHÂN LOẠI TƯ THẾ
 # =====================================
 
 def detect_posture(ax, ay, az):
 
     eps = 0.25
 
+    # Nằm
     if abs(az - 1.0) < eps:
         return "NAM"
 
+    # Đứng
     elif abs(ax - 1.0) < eps:
         return "DUNG"
 
+    # Ngồi
     else:
         return "NGOI"
-
 
 # =====================================
 # DASHBOARD
@@ -95,11 +93,6 @@ def home():
 
             <hr>
 
-            <h3>Pitch = {latest_data["pitch"]}°</h3>
-            <h3>Roll = {latest_data["roll"]}°</h3>
-
-            <hr>
-
             <p>AX = {latest_data["ax"]}</p>
             <p>AY = {latest_data["ay"]}</p>
             <p>AZ = {latest_data["az"]}</p>
@@ -121,9 +114,8 @@ def home():
     </html>
     """
 
-
 # =====================================
-# API STATUS
+# STATUS
 # =====================================
 
 @app.route("/status")
@@ -134,9 +126,8 @@ def status():
         "posture": latest_data["posture"]
     })
 
-
 # =====================================
-# API DỮ LIỆU HIỆN TẠI
+# CURRENT DATA
 # =====================================
 
 @app.route("/current")
@@ -144,9 +135,8 @@ def current():
 
     return jsonify(latest_data)
 
-
 # =====================================
-# API NHẬN DỮ LIỆU ESP32
+# NHẬN DỮ LIỆU ESP32
 # =====================================
 
 @app.route("/posture", methods=["POST"])
@@ -166,18 +156,14 @@ def posture():
         gy = float(data.get("gy", 0))
         gz = float(data.get("gz", 0))
 
-        posture_result, pitch, roll = detect_posture(
+        posture_result = detect_posture(
             ax,
             ay,
             az
         )
 
         latest_data = {
-
             "posture": posture_result,
-
-            "pitch": round(pitch, 2),
-            "roll": round(roll, 2),
 
             "ax": round(ax, 3),
             "ay": round(ay, 3),
@@ -195,27 +181,16 @@ def posture():
         print(latest_data)
 
         return jsonify({
-
             "success": True,
-
-            "posture": posture_result,
-
-            "pitch": round(pitch, 2),
-
-            "roll": round(roll, 2)
-
+            "posture": posture_result
         })
 
     except Exception as e:
 
         return jsonify({
-
             "success": False,
-
             "error": str(e)
-
         }), 400
-
 
 # =====================================
 # MAIN
