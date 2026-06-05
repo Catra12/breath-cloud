@@ -1,52 +1,162 @@
 from flask import Flask, request, jsonify
-import math
+from datetime import datetime
 
 app = Flask(__name__)
 
-# =========================
+# ==========================
+# BIẾN TOÀN CỤC
+# ==========================
+
+latest_data = {
+    "posture": "UNKNOWN",
+    "ax": 0,
+    "ay": 0,
+    "az": 0,
+    "gx": 0,
+    "gy": 0,
+    "gz": 0,
+    "time": "-"
+}
+
+
+# ==========================
+# THUẬT TOÁN TƯ THẾ
+# ==========================
+
+def detect_posture(ax, ay, az):
+
+    g = 1.0
+    threshold = 0.2
+
+    if (
+        abs(az - g) < threshold
+        and abs(ax) < 0.4
+        and abs(ay) < 0.4
+    ):
+        return "NAM"
+
+    elif (
+        abs(ay - g) < threshold
+        and abs(ax) < 0.4
+        and abs(az) < 0.4
+    ):
+        return "NAM_NGHIENG"
+
+    elif (
+        abs(ax - g) < threshold
+        and abs(ay) < 0.4
+        and abs(az) < 0.4
+    ):
+        return "DUNG"
+
+    else:
+        return "NGOI"
+
+
+# ==========================
 # HOME PAGE
-# =========================
+# ==========================
+
 @app.route("/")
 def home():
-    return """
+
+    return f"""
     <html>
+
     <head>
+
         <title>Breath AI Cloud</title>
+
+        <meta http-equiv="refresh" content="2">
+
+        <style>
+
+        body {{
+            font-family: Arial;
+            text-align: center;
+            margin-top: 40px;
+        }}
+
+        .card {{
+            width: 400px;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+        }}
+
+        h1 {{
+            color: green;
+        }}
+
+        </style>
+
     </head>
 
     <body>
-        <h1>🚀 Breath AI Cloud Server</h1>
 
-        <p>Server Status: Online</p>
+        <h1>🚀 Breath AI Cloud</h1>
 
-        <h3>Available APIs</h3>
+        <div class="card">
 
-        <ul>
-            <li>GET /status</li>
-            <li>POST /posture</li>
-        </ul>
+            <h2>Tư thế hiện tại</h2>
+
+            <h1>{latest_data["posture"]}</h1>
+
+            <hr>
+
+            <p>AX = {latest_data["ax"]}</p>
+            <p>AY = {latest_data["ay"]}</p>
+            <p>AZ = {latest_data["az"]}</p>
+
+            <p>GX = {latest_data["gx"]}</p>
+            <p>GY = {latest_data["gy"]}</p>
+            <p>GZ = {latest_data["gz"]}</p>
+
+            <hr>
+
+            <p>Cập nhật lần cuối:</p>
+            <b>{latest_data["time"]}</b>
+
+        </div>
 
     </body>
+
     </html>
     """
 
 
-# =========================
+# ==========================
 # STATUS
-# =========================
+# ==========================
+
 @app.route("/status")
 def status():
+
     return jsonify({
         "server": "online",
-        "service": "Breath AI Cloud"
+        "posture": latest_data["posture"]
     })
 
 
-# =========================
-# POSTURE API
-# =========================
+# ==========================
+# CURRENT DATA
+# ==========================
+
+@app.route("/current")
+def current():
+
+    return jsonify(latest_data)
+
+
+# ==========================
+# ESP32 POST DATA
+# ==========================
+
 @app.route("/posture", methods=["POST"])
 def posture():
+
+    global latest_data
 
     try:
 
@@ -60,82 +170,56 @@ def posture():
         gy = float(data.get("gy", 0))
         gz = float(data.get("gz", 0))
 
-        # Độ lớn gia tốc
-        acc_mag = math.sqrt(
-            ax**2 +
-            ay**2 +
-            az**2
+        posture_result = detect_posture(
+            ax,
+            ay,
+            az
         )
 
-        # Tính góc nghiêng
-        pitch = math.degrees(
-            math.atan2(
-                ax,
-                math.sqrt(ay*ay + az*az)
+        latest_data = {
+
+            "posture": posture_result,
+
+            "ax": round(ax, 3),
+            "ay": round(ay, 3),
+            "az": round(az, 3),
+
+            "gx": round(gx, 3),
+            "gy": round(gy, 3),
+            "gz": round(gz, 3),
+
+            "time": datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
             )
-        )
+        }
 
-        roll = math.degrees(
-            math.atan2(
-                ay,
-                math.sqrt(ax*ax + az*az)
-            )
-        )
-
-        # =====================
-        # PHÂN LOẠI TƯ THẾ
-        # =====================
-
-        posture = "UNKNOWN"
-
-        if abs(az) > 8:
-
-            if abs(pitch) < 20:
-                posture = "GOOD_POSTURE"
-            else:
-                posture = "BAD_POSTURE"
-
-        elif abs(ay) > 8:
-            posture = "LYING"
-
-        elif abs(ax) > 8:
-            posture = "SIDE"
-
-        else:
-            posture = "MOVING"
-
-        print(
-            f"AX={ax:.2f} "
-            f"AY={ay:.2f} "
-            f"AZ={az:.2f} "
-            f"PITCH={pitch:.2f} "
-            f"ROLL={roll:.2f} "
-            f"==> {posture}"
-        )
+        print(latest_data)
 
         return jsonify({
 
             "success": True,
 
-            "posture": posture,
-
-            "pitch": round(pitch, 2),
-
-            "roll": round(roll, 2),
-
-            "acc_mag": round(acc_mag, 2)
+            "posture": posture_result
 
         })
 
     except Exception as e:
 
         return jsonify({
+
             "success": False,
+
             "error": str(e)
+
         }), 400
 
 
+# ==========================
+# MAIN
+# ==========================
+
 if __name__ == "__main__":
+
     app.run(
         host="0.0.0.0",
         port=5000
