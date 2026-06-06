@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 
 import joblib
 import numpy as np
@@ -55,6 +56,10 @@ except Exception as e:
 WINDOW_SIZE = 500   # 20s x 25Hz
 FS = 25
 N_FEATURES = 8      # ax,ay,az,gx,gy,gz,acc_mag,gyro_mag
+DATA_TIMEOUT_SECONDS = 5
+MAX_GYRO_ABS = 20.0
+MIN_ACC_MAG_STD = 0.003
+MIN_GYRO_MAG_STD = 0.0005
 
 # Luu 8 features: ax, ay, az, gx, gy, gz, acc_mag, gyro_mag
 buffer = []
@@ -63,7 +68,7 @@ buffer = []
 # DATA
 # ==================================================
 
-latest_data = {
+DEFAULT_DATA = {
     "posture": "WAITING",
     "bpm": "WAITING",
     "ax": 0,
@@ -75,31 +80,37 @@ latest_data = {
     "time": "-"
 }
 
+latest_data = DEFAULT_DATA.copy()
+last_data_at = None
+
 # ==================================================
 # POSTURE
 # ==================================================
 
 
 def detect_posture(ax, ay, az):
-    # MPU6050 gui don vi g tu Arduino code. Chuan hoa vector de doc tu the.
-    g_val = np.sqrt(ax**2 + ay**2 + az**2)
+    g = 1.0
+    threshold = 0.2
 
-    if g_val <= 0:
-        return "UNKNOWN"
-
-    ax_n = ax / g_val
-    ay_n = ay / g_val
-    az_n = az / g_val
-
-    threshold = 0.3
-
-    if abs(az_n - 1.0) < threshold:
+    if (
+        abs(az - g) < threshold
+        and abs(ax) < 0.4
+        and abs(ay) < 0.4
+    ):
         return "NAM"
-    if abs(az_n + 1.0) < threshold:
-        return "NAM_NGUA"
-    if abs(ay_n - 1.0) < threshold:
+
+    if (
+        abs(ay - g) < threshold
+        and abs(ax) < 0.4
+        and abs(az) < 0.4
+    ):
         return "NAM_NGHIENG"
-    if abs(ax_n - 1.0) < threshold or abs(ax_n + 1.0) < threshold:
+
+    if (
+        abs(ax - g) < threshold
+        and abs(ay) < 0.4
+        and abs(az) < 0.4
+    ):
         return "DUNG"
 
     return "NGOI"
@@ -122,6 +133,14 @@ def predict_bpm():
             dtype=np.float32
         )  # shape (500, 8)
 
+        if np.max(np.abs(window[:, 3:6])) > MAX_GYRO_ABS:
+            return "SENSOR_ERROR"
+
+        acc_mag_std = float(np.std(window[:, 6]))
+        gyro_mag_std = float(np.std(window[:, 7]))
+        if acc_mag_std < MIN_ACC_MAG_STD and gyro_mag_std < MIN_GYRO_MAG_STD:
+            return "NO_BREATH"
+
         scaled = scaler.transform(window)
         scaled = scaled.reshape(1, WINDOW_SIZE, N_FEATURES).astype(np.float32)
 
@@ -139,6 +158,24 @@ def predict_bpm():
 # ==================================================
 # DATA INGESTION
 # ==================================================
+
+
+def reset_runtime_state():
+    global latest_data, last_data_at
+
+    buffer.clear()
+    latest_data = DEFAULT_DATA.copy()
+    last_data_at = None
+
+
+def get_live_data():
+    if last_data_at is None:
+        return latest_data
+
+    if time.monotonic() - last_data_at > DATA_TIMEOUT_SECONDS:
+        reset_runtime_state()
+
+    return latest_data
 
 
 def process_sample(sample):
@@ -179,6 +216,8 @@ def extract_samples(payload):
 
 @app.route("/")
 def home():
+    current_data = get_live_data()
+
     return f"""
 <!DOCTYPE html>
 <html>
@@ -246,21 +285,21 @@ body {{
 </div>
 <div class="section">
 <h3>TU THE HIEN TAI</h3>
-<div class="big">{latest_data["posture"]}</div>
+<div class="big">{current_data["posture"]}</div>
 </div>
 <div class="section">
 <h3>NHIP THO AI</h3>
-<div class="big">{latest_data["bpm"]}</div>
+<div class="big">{current_data["bpm"]}</div>
 </div>
 <div class="grid">
-<div class="box">AX<div class="value">{latest_data["ax"]}</div></div>
-<div class="box">AY<div class="value">{latest_data["ay"]}</div></div>
-<div class="box">AZ<div class="value">{latest_data["az"]}</div></div>
-<div class="box">GX<div class="value">{latest_data["gx"]}</div></div>
-<div class="box">GY<div class="value">{latest_data["gy"]}</div></div>
-<div class="box">GZ<div class="value">{latest_data["gz"]}</div></div>
+<div class="box">AX<div class="value">{current_data["ax"]}</div></div>
+<div class="box">AY<div class="value">{current_data["ay"]}</div></div>
+<div class="box">AZ<div class="value">{current_data["az"]}</div></div>
+<div class="box">GX<div class="value">{current_data["gx"]}</div></div>
+<div class="box">GY<div class="value">{current_data["gy"]}</div></div>
+<div class="box">GZ<div class="value">{current_data["gz"]}</div></div>
 </div>
-<div class="footer">Last Update: {latest_data["time"]}</div>
+<div class="footer">Last Update: {current_data["time"]}</div>
 </div>
 </body>
 </html>
@@ -273,6 +312,8 @@ body {{
 
 @app.route("/status")
 def status():
+    current_data = get_live_data()
+
     return jsonify({
         "server": "online",
         "model": MODEL_OK,
@@ -281,15 +322,15 @@ def status():
         "input_shape": (
             input_details[0]["shape"].tolist() if input_details else None
         ),
-        "posture": latest_data["posture"],
-        "bpm": latest_data["bpm"],
+        "posture": current_data["posture"],
+        "bpm": current_data["bpm"],
         "buffer": len(buffer)
     })
 
 
 @app.route("/current")
 def current():
-    return jsonify(latest_data)
+    return jsonify(get_live_data())
 
 
 @app.route("/test")
@@ -306,9 +347,21 @@ def test():
     })
 
 
+@app.route("/reset", methods=["GET", "POST"])
+def reset():
+    reset_runtime_state()
+
+    return jsonify({
+        "success": True,
+        "message": "Runtime state reset",
+        "buffer": len(buffer),
+        "data": latest_data
+    })
+
+
 @app.route("/posture", methods=["POST"])
 def posture():
-    global latest_data
+    global latest_data, last_data_at
 
     try:
         payload = request.get_json(force=True)
@@ -333,6 +386,7 @@ def posture():
             "gz": round(gz, 3),
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        last_data_at = time.monotonic()
 
         print({
             **latest_data,
