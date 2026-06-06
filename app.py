@@ -13,23 +13,13 @@ app = Flask(__name__)
 MODEL_OK = False
 
 try:
-    # Dùng TFLite thay vì tf.keras.models.load_model
-    try:
-        # Render dùng tflite-runtime (nhẹ hơn)
-        import tensorflow as tf
+    import tensorflow as tf
 
-        interpreter = tf.lite.Interpreter(
-            model_path="modelAI/breath_v3.tflite"
-        )
-    except ImportError:
-        # Fallback: dùng tensorflow nếu có
-        import tensorflow as tf
-        interpreter = tf.lite.Interpreter(
-            model_path="modelAI/breath_v3.tflite"
-        )
-
+    interpreter = tf.lite.Interpreter(
+        model_path="modelAI/breath_v3.tflite"
+    )
     interpreter.allocate_tensors()
-    input_details = interpreter.get_input_details()
+    input_details  = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
 
     scaler = joblib.load(
@@ -40,15 +30,16 @@ try:
 
     print("=" * 50)
     print("AI MODEL LOADED SUCCESS (TFLite)")
-    print(f"Input  : {input_details[0]['shape']}")
-    print(f"Output : {output_details[0]['shape']}")
+    print(f"Input : {input_details[0]['shape']}")
     print("=" * 50)
 
 except Exception as e:
+
     print("=" * 50)
     print("AI LOAD FAILED")
-    print(e)
+    print(type(e).__name__, str(e))
     print("=" * 50)
+
 
 # ==================================================
 # CONFIG

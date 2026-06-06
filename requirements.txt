@@ -3,4 +3,4 @@ gunicorn
 numpy==1.26.4
 joblib
 scikit-learn==1.6.1
-tflite-runtime
+tensorflow-cpu==2.15.0
