@@ -3,7 +3,10 @@ import time
 
 import joblib
 import numpy as np
-import tensorflow as tf
+try:
+    import tensorflow as tf
+except Exception as e:
+    tf = None
 from flask import Flask, jsonify, request
 
 app = Flask(__name__)
@@ -317,84 +320,259 @@ def home():
 <html>
 <head>
 <meta charset="utf-8">
-<meta http-equiv="refresh" content="1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Breath AI Cloud</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
+:root {{
+    --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    --card-bg: rgba(30, 41, 59, 0.7);
+    --border-color: rgba(255, 255, 255, 0.08);
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --primary: #10b981;
+    --primary-glow: rgba(16, 185, 129, 0.15);
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.15);
+}}
+
 body {{
-    font-family: Arial;
-    background:#f2f2f2;
-    text-align:center;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: var(--bg-gradient);
+    min-height: 100vh;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    padding: 20px;
+    box-sizing: border-box;
 }}
+
 .card {{
-    width:800px;
-    margin:auto;
-    margin-top:30px;
-    background:white;
-    border-radius:10px;
-    overflow:hidden;
+    width: 100%;
+    max-width: 800px;
+    background: var(--card-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    transition: transform 0.3s ease;
 }}
+
 .header {{
-    background:#188038;
-    color:white;
-    padding:20px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%);
+    border-bottom: 1px solid var(--border-color);
+    padding: 32px 24px;
+    text-align: center;
 }}
+
+.header h1 {{
+    margin: 0;
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: -0.05em;
+    background: linear-gradient(to right, #34d399, #3b82f6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}}
+
+.header p {{
+    margin: 8px 0 0 0;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    font-weight: 500;
+}}
+
+.main-sections {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    padding: 24px;
+}}
+
+@media (max-width: 600px) {{
+    .main-sections {{
+        grid-template-columns: 1fr;
+    }}
+}}
+
 .section {{
-    margin:20px;
-    padding:20px;
-    background:#fafafa;
-    border-left:5px solid green;
-    text-align:left;
+    padding: 24px;
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
 }}
+
+.section::before {{
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+}}
+
+.section.posture-sec::before {{
+    background: var(--accent);
+}}
+
+.section.bpm-sec::before {{
+    background: var(--primary);
+}}
+
+.section h3 {{
+    margin: 0 0 12px 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}}
+
+.live-indicator {{
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 0 0 var(--primary-glow);
+    animation: pulse 1.5s infinite;
+}}
+
+@keyframes pulse {{
+    0% {{
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }}
+    70% {{
+        transform: scale(1);
+        box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+    }}
+    100% {{
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }}
+}}
+
 .big {{
-    font-size:50px;
-    color:green;
-    font-weight:bold;
+    font-size: 2.8rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
 }}
+
+.posture-sec .big {{
+    color: #3b82f6;
+    text-shadow: 0 0 20px var(--accent-glow);
+}}
+
+.bpm-sec .big {{
+    color: #10b981;
+    text-shadow: 0 0 20px var(--primary-glow);
+}}
+
 .grid {{
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:10px;
-    margin:20px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 0 24px 24px 24px;
 }}
+
 .box {{
-    background:#f7f7f7;
-    padding:20px;
-    border-radius:10px;
+    background: rgba(15, 23, 42, 0.3);
+    border: 1px solid var(--border-color);
+    padding: 16px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.05em;
+    transition: background 0.2s ease;
 }}
+
+.box:hover {{
+    background: rgba(15, 23, 42, 0.5);
+}}
+
 .value {{
-    font-size:28px;
-    font-weight:bold;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-top: 4px;
+    font-family: monospace;
 }}
+
 .footer {{
-    padding:20px;
-    color:gray;
+    padding: 16px 24px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-align: center;
+    border-top: 1px solid var(--border-color);
+    background: rgba(15, 23, 42, 0.2);
 }}
 </style>
 </head>
 <body>
 <div class="card">
-<div class="header">
-<h1>Breath AI Cloud</h1>
-<p>Real-time Posture & Breath Monitor</p>
+    <div class="header">
+        <h1>Breath AI Cloud</h1>
+        <p>Real-time Posture & Breath Monitor</p>
+    </div>
+    
+    <div class="main-sections">
+        <div class="section posture-sec">
+            <h3>Tư thế hiện tại</h3>
+            <div class="big" id="posture">{current_data["posture"]}</div>
+        </div>
+        <div class="section bpm-sec">
+            <h3>Nhịp thở AI <span class="live-indicator"></span></h3>
+            <div class="big" id="bpm">{current_data["bpm"]}</div>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="box">AX <div class="value" id="val-ax">{current_data["ax"]}</div></div>
+        <div class="box">AY <div class="value" id="val-ay">{current_data["ay"]}</div></div>
+        <div class="box">AZ <div class="value" id="val-az">{current_data["az"]}</div></div>
+        <div class="box">GX <div class="value" id="val-gx">{current_data["gx"]}</div></div>
+        <div class="box">GY <div class="value" id="val-gy">{current_data["gy"]}</div></div>
+        <div class="box">GZ <div class="value" id="val-gz">{current_data["gz"]}</div></div>
+    </div>
+    <div class="footer" id="last-update">Last Update: {current_data["time"]}</div>
 </div>
-<div class="section">
-<h3>TU THE HIEN TAI</h3>
-<div class="big">{current_data["posture"]}</div>
-</div>
-<div class="section">
-<h3>NHIP THO AI</h3>
-<div class="big">{current_data["bpm"]}</div>
-</div>
-<div class="grid">
-<div class="box">AX<div class="value">{current_data["ax"]}</div></div>
-<div class="box">AY<div class="value">{current_data["ay"]}</div></div>
-<div class="box">AZ<div class="value">{current_data["az"]}</div></div>
-<div class="box">GX<div class="value">{current_data["gx"]}</div></div>
-<div class="box">GY<div class="value">{current_data["gy"]}</div></div>
-<div class="box">GZ<div class="value">{current_data["gz"]}</div></div>
-</div>
-<div class="footer">Last Update: {current_data["time"]}</div>
-</div>
+
+<script>
+function updateData() {{
+    fetch('/current')
+        .then(response => response.json())
+        .then(data => {{
+            document.getElementById('posture').innerText = data.posture;
+            document.getElementById('bpm').innerText = data.bpm;
+            document.getElementById('val-ax').innerText = data.ax;
+            document.getElementById('val-ay').innerText = data.ay;
+            document.getElementById('val-az').innerText = data.az;
+            document.getElementById('val-gx').innerText = data.gx;
+            document.getElementById('val-gy').innerText = data.gy;
+            document.getElementById('val-gz').innerText = data.gz;
+            document.getElementById('last-update').innerText = "Last Update: " + data.time;
+        }})
+        .catch(error => console.error('Error fetching data:', error));
+}}
+setInterval(updateData, 1000);
+</script>
 </body>
 </html>
 """
