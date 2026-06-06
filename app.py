@@ -58,8 +58,15 @@ FS = 25
 N_FEATURES = 8      # ax,ay,az,gx,gy,gz,acc_mag,gyro_mag
 DATA_TIMEOUT_SECONDS = 5
 MAX_GYRO_ABS = 20.0
+GYRO_DPS_AUTO_CONVERT_ABS = 20.0
+GYRO_DPS_MAX_REASONABLE = 500.0
 MIN_ACC_MAG_STD = 0.003
 MIN_GYRO_MAG_STD = 0.0005
+MIN_STATIC_AXIS_RANGE = 0.012
+MIN_CLEAR_AXIS_RANGE = 0.025
+MIN_BREATH_BAND_RATIO = 0.25
+BREATH_FREQ_MIN = 0.10
+BREATH_FREQ_MAX = 0.55
 
 # Luu 8 features: ax, ay, az, gx, gy, gz, acc_mag, gyro_mag
 buffer = []
@@ -120,6 +127,92 @@ def detect_posture(ax, ay, az):
 # ==================================================
 
 
+def analyze_breath_signal(window):
+    gyro_abs_max = float(np.max(np.abs(window[:, 3:6])))
+    if gyro_abs_max > MAX_GYRO_ABS:
+        return False, "SENSOR_ERROR", {
+            "gyro_abs_max": round(gyro_abs_max, 4)
+        }
+
+    gyro_mag_std = float(np.std(window[:, 7]))
+    candidate_channels = {
+        "ax": window[:, 0],
+        "ay": window[:, 1],
+        "az": window[:, 2],
+        "acc_mag": window[:, 6],
+    }
+
+    best = {
+        "channel": None,
+        "range": 0.0,
+        "band_ratio": 0.0,
+        "dominant_bpm": None,
+    }
+
+    freqs = np.fft.rfftfreq(WINDOW_SIZE, d=1.0 / FS)
+    breath_mask = (freqs >= BREATH_FREQ_MIN) & (freqs <= BREATH_FREQ_MAX)
+    useful_mask = (freqs >= 0.03) & (freqs <= 2.0)
+
+    for name, values in candidate_channels.items():
+        values = np.asarray(values, dtype=np.float32)
+        axis_range = float(np.percentile(values, 95) - np.percentile(values, 5))
+
+        signal = values - np.mean(values)
+        signal = signal * np.hanning(len(signal))
+        spectrum = np.abs(np.fft.rfft(signal)) ** 2
+
+        useful_power = float(np.sum(spectrum[useful_mask]))
+        breath_power = float(np.sum(spectrum[breath_mask]))
+        band_ratio = breath_power / (useful_power + 1e-12)
+
+        dominant_bpm = None
+        if np.any(breath_mask) and breath_power > 0:
+            breath_freqs = freqs[breath_mask]
+            breath_spectrum = spectrum[breath_mask]
+            dominant_bpm = float(breath_freqs[np.argmax(breath_spectrum)] * 60.0)
+
+        if band_ratio > best["band_ratio"] or axis_range > best["range"]:
+            best = {
+                "channel": name,
+                "range": axis_range,
+                "band_ratio": band_ratio,
+                "dominant_bpm": dominant_bpm,
+            }
+
+    if best["range"] < MIN_STATIC_AXIS_RANGE and gyro_mag_std < MIN_GYRO_MAG_STD:
+        return False, "NO_BREATH", {
+            "reason": "static_signal",
+            "axis_range": round(best["range"], 5),
+            "gyro_mag_std": round(gyro_mag_std, 5),
+            "band_ratio": round(best["band_ratio"], 4),
+            "dominant_bpm": best["dominant_bpm"],
+        }
+
+    if (
+        best["range"] < MIN_CLEAR_AXIS_RANGE
+        and best["band_ratio"] < MIN_BREATH_BAND_RATIO
+    ):
+        return False, "NO_BREATH", {
+            "reason": "unclear_breath_band",
+            "axis_range": round(best["range"], 5),
+            "gyro_mag_std": round(gyro_mag_std, 5),
+            "band_ratio": round(best["band_ratio"], 4),
+            "dominant_bpm": best["dominant_bpm"],
+        }
+
+    return True, "OK", {
+        "channel": best["channel"],
+        "axis_range": round(best["range"], 5),
+        "gyro_mag_std": round(gyro_mag_std, 5),
+        "band_ratio": round(best["band_ratio"], 4),
+        "dominant_bpm": (
+            round(best["dominant_bpm"], 2)
+            if best["dominant_bpm"] is not None
+            else None
+        ),
+    }
+
+
 def predict_bpm():
     if not MODEL_OK:
         return "AI_FAILED"
@@ -133,13 +226,10 @@ def predict_bpm():
             dtype=np.float32
         )  # shape (500, 8)
 
-        if np.max(np.abs(window[:, 3:6])) > MAX_GYRO_ABS:
-            return "SENSOR_ERROR"
-
-        acc_mag_std = float(np.std(window[:, 6]))
-        gyro_mag_std = float(np.std(window[:, 7]))
-        if acc_mag_std < MIN_ACC_MAG_STD and gyro_mag_std < MIN_GYRO_MAG_STD:
-            return "NO_BREATH"
+        signal_ok, signal_status, signal_info = analyze_breath_signal(window)
+        if not signal_ok:
+            print("SIGNAL CHECK:", signal_status, signal_info)
+            return signal_status
 
         scaled = scaler.transform(window)
         scaled = scaled.reshape(1, WINDOW_SIZE, N_FEATURES).astype(np.float32)
@@ -185,6 +275,10 @@ def process_sample(sample):
     gx = float(sample.get("gx", 0))
     gy = float(sample.get("gy", 0))
     gz = float(sample.get("gz", 0))
+
+    gyro_abs_max = max(abs(gx), abs(gy), abs(gz))
+    if GYRO_DPS_AUTO_CONVERT_ABS < gyro_abs_max <= GYRO_DPS_MAX_REASONABLE:
+        gx, gy, gz = np.deg2rad([gx, gy, gz])
 
     acc_mag = float(np.sqrt(ax**2 + ay**2 + az**2))
     gyro_mag = float(np.sqrt(gx**2 + gy**2 + gz**2))
