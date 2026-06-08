@@ -1,0 +1,55 @@
+{
+  "version": "logic_fixed",
+  "task": "breath_rate_classification",
+  "model_mode": "logic_flat_regularized",
+  "sampling_rate_hz": 25,
+  "duration_seconds": 60,
+  "window_size": 500,
+  "step_size": 250,
+  "feature_columns": [
+    "acc_mag_filtered",
+    "gyro_mag",
+    "spectral_power",
+    "fft_bpm_norm",
+    "fft_confidence"
+  ],
+  "num_features": 5,
+  "classes_bpm": [
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20
+  ],
+  "input_shape": [
+    1,
+    500,
+    5
+  ],
+  "output_shape": [
+    1,
+    9
+  ],
+  "total_params": 80329,
+  "split_method": "sample_id_based_no_leakage",
+  "train_samples": 432,
+  "val_samples": 99,
+  "test_samples": 99,
+  "train_windows": 2160,
+  "val_windows": 495,
+  "test_windows": 495,
+  "best_val_accuracy": 0.9494949579238892,
+  "best_val_loss": 0.14416925609111786,
+  "test_accuracy": 0.9333333333333333,
+  "notes": [
+    "Data synthetic da them jitter, amplitude modulation, noise va motion burst nhe",
+    "Giam overlap window tu 5s step thanh 10s step",
+    "Khong augment train truc tiep de bieu do train/val de doc hon",
+    "Model nho hon ban high_accuracy_flat cu: Dense(32) + L2 + Dropout",
+    "Co kiem tra data leakage train/val/test"
+  ]
+}

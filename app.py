@@ -3,16 +3,12 @@ import time
 
 import joblib
 import numpy as np
-try:
-    import tensorflow as tf
-except Exception as e:
-    tf = None
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 
 app = Flask(__name__)
 
 # ==================================================
-# AI MODEL - TFLite only
+# AI MODEL - TFLite only (with fallback)
 # ==================================================
 
 MODEL_OK = False
@@ -23,14 +19,24 @@ input_details = None
 output_details = None
 scaler = None
 
+Interpreter = None
+try:
+    import tensorflow as tf
+    Interpreter = tf.lite.Interpreter
+except ImportError:
+    try:
+        import tflite_runtime.interpreter as tflite
+        Interpreter = tflite.Interpreter
+    except ImportError:
+        Interpreter = None
+
 try:
     scaler = joblib.load("modelAI/breath_scaler_v3.joblib")
 
-    # File breath_v3.tflite co the dung Select TF Ops, nen cloud van can
-    # package tensorflow de chay tf.lite.Interpreter. Khong load file .keras.
-    interpreter = tf.lite.Interpreter(
-        model_path="modelAI/breath_v3.tflite"
-    )
+    if Interpreter is None:
+        raise ImportError("Neither tensorflow nor tflite_runtime is installed.")
+
+    interpreter = Interpreter(model_path="modelAI/breath_v3.tflite")
     interpreter.allocate_tensors()
 
     input_details = interpreter.get_input_details()
@@ -58,7 +64,7 @@ except Exception as e:
 
 WINDOW_SIZE = 500   # 20s x 25Hz
 FS = 25
-N_FEATURES = 8      # ax,ay,az,gx,gy,gz,acc_mag,gyro_mag
+N_FEATURES = 5      # acc_mag_filtered, gyro_mag, spectral_power, fft_bpm_norm, fft_confidence
 DATA_TIMEOUT_SECONDS = 5
 MAX_GYRO_ABS = 20.0
 GYRO_DPS_AUTO_CONVERT_ABS = 20.0
@@ -71,7 +77,14 @@ MIN_BREATH_BAND_RATIO = 0.25
 BREATH_FREQ_MIN = 0.10
 BREATH_FREQ_MAX = 0.55
 
-# Luu 8 features: ax, ay, az, gx, gy, gz, acc_mag, gyro_mag
+# Precomputed FFT constants and BPM classes
+freqs = np.fft.rfftfreq(WINDOW_SIZE, d=1.0 / FS)
+breath_mask = (freqs >= 0.10) & (freqs <= 0.55)   # 6-33 BPM
+useful_mask = (freqs >= 0.03) & (freqs <= 2.0)
+hann = np.hanning(WINDOW_SIZE)
+classes_bpm = [12, 13, 14, 15, 16, 17, 18, 19, 20]
+
+# Stores 8-element raw data: ax, ay, az, gx, gy, gz, acc_mag, gyro_mag
 buffer = []
 
 # ==================================================
@@ -87,7 +100,17 @@ DEFAULT_DATA = {
     "gx": 0,
     "gy": 0,
     "gz": 0,
-    "time": "-"
+    "time": "-",
+    "method": "-",
+    "expected_bpm": None,
+    "argmax_bpm": None,
+    "confidence": None,
+    "probabilities": [0.0] * len(classes_bpm),
+    "fft_bpm": None,
+    "fft_confidence": None,
+    "spectral_power": None,
+    "signal_status": "WAITING",
+    "buffer_size": 0
 }
 
 latest_data = DEFAULT_DATA.copy()
@@ -126,8 +149,34 @@ def detect_posture(ax, ay, az):
     return "NGOI"
 
 # ==================================================
-# AI BPM
+# PREPROCESSING & AI BPM
 # ==================================================
+
+
+def rolling_mean_numpy(x, window_len=5):
+    n = len(x)
+    out = np.empty(n, dtype=np.float32)
+    for i in range(n):
+        start = max(0, i - window_len // 2)
+        end = min(n, i + window_len // 2 + 1)
+        out[i] = np.mean(x[start:end])
+    return out
+
+
+def compute_fft_features(signal):
+    seg = signal.astype(np.float64).copy()
+    seg -= seg.mean()
+    seg *= hann
+
+    spectrum = np.abs(np.fft.rfft(seg)) ** 2
+    breath_power = spectrum[breath_mask]
+    useful_power = spectrum[useful_mask].sum() + 1e-9
+
+    spectral_power = np.log1p(breath_power.sum())
+    fft_bpm = freqs[breath_mask][np.argmax(breath_power)] * 60.0
+    fft_confidence = breath_power.max() / useful_power
+
+    return float(spectral_power), float(fft_bpm / 60.0), float(fft_confidence)
 
 
 def analyze_breath_signal(window):
@@ -151,10 +200,6 @@ def analyze_breath_signal(window):
         "band_ratio": 0.0,
         "dominant_bpm": None,
     }
-
-    freqs = np.fft.rfftfreq(WINDOW_SIZE, d=1.0 / FS)
-    breath_mask = (freqs >= BREATH_FREQ_MIN) & (freqs <= BREATH_FREQ_MAX)
-    useful_mask = (freqs >= 0.03) & (freqs <= 2.0)
 
     for name, values in candidate_channels.items():
         values = np.asarray(values, dtype=np.float32)
@@ -217,11 +262,11 @@ def analyze_breath_signal(window):
 
 
 def predict_bpm():
-    if not MODEL_OK:
-        return "AI_FAILED"
-
     if len(buffer) < WINDOW_SIZE:
-        return f"BUFFER {len(buffer)}/{WINDOW_SIZE}"
+        return {
+            "status": f"BUFFER {len(buffer)}/{WINDOW_SIZE}",
+            "bpm": f"BUFFER {len(buffer)}/{WINDOW_SIZE}"
+        }
 
     try:
         window = np.array(
@@ -232,21 +277,71 @@ def predict_bpm():
         signal_ok, signal_status, signal_info = analyze_breath_signal(window)
         if not signal_ok:
             print("SIGNAL CHECK:", signal_status, signal_info)
-            return signal_status
+            return {
+                "status": signal_status,
+                "bpm": signal_status,
+                "info": signal_info
+            }
 
-        scaled = scaler.transform(window)
-        scaled = scaled.reshape(1, WINDOW_SIZE, N_FEATURES).astype(np.float32)
+        acc_mag = window[:, 6]
+        gyro_mag = window[:, 7]
+        acc_mag_filtered = rolling_mean_numpy(acc_mag, window_len=5)
+
+        spectral_power, fft_bpm_norm, fft_confidence = compute_fft_features(acc_mag_filtered)
+        fft_bpm = fft_bpm_norm * 60.0
+
+        if not MODEL_OK:
+            # Fallback to FFT estimation
+            return {
+                "status": "OK",
+                "bpm": f"{round(fft_bpm, 1)} (FFT)",
+                "method": "FFT",
+                "fft_bpm": round(fft_bpm, 1),
+                "fft_confidence": round(fft_confidence, 3),
+                "spectral_power": round(spectral_power, 3)
+            }
+
+        # Construct 5-feature matrix [acc_mag_filtered, gyro_mag, spectral_power, fft_bpm_norm, fft_confidence]
+        window_base = np.column_stack((acc_mag_filtered, gyro_mag)).astype(np.float32)
+        constant_features = np.tile(
+            np.array([spectral_power, fft_bpm_norm, fft_confidence], dtype=np.float32),
+            (WINDOW_SIZE, 1)
+        )
+        model_input = np.concatenate([window_base, constant_features], axis=1)
+
+        # Scale and predict
+        scaled = scaler.transform(model_input)
+        scaled = scaled.reshape(1, WINDOW_SIZE, 5).astype(np.float32)
 
         interpreter.set_tensor(input_details[0]["index"], scaled)
         interpreter.invoke()
-        pred = interpreter.get_tensor(output_details[0]["index"])[0][0]
-        pred = float(np.clip(pred, 12, 20))
+        output_probs = interpreter.get_tensor(output_details[0]["index"])[0]  # shape (9,)
 
-        return round(pred, 1)
+        pred_idx = int(np.argmax(output_probs))
+        argmax_bpm = classes_bpm[pred_idx]
+        expected_bpm = float(np.sum(output_probs * classes_bpm))
+        confidence = float(output_probs[pred_idx])
+
+        return {
+            "status": "OK",
+            "bpm": f"{round(expected_bpm, 1)}",
+            "method": "AI",
+            "expected_bpm": round(expected_bpm, 2),
+            "argmax_bpm": argmax_bpm,
+            "confidence": round(confidence, 3),
+            "probabilities": [round(float(p), 4) for p in output_probs],
+            "fft_bpm": round(fft_bpm, 1),
+            "fft_confidence": round(fft_confidence, 3),
+            "spectral_power": round(spectral_power, 3)
+        }
 
     except Exception as e:
         print("AI ERROR:", type(e).__name__, e)
-        return "AI_ERROR"
+        return {
+            "status": "AI_ERROR",
+            "bpm": "AI_ERROR",
+            "error": str(e)
+        }
 
 # ==================================================
 # DATA INGESTION
@@ -313,269 +408,7 @@ def extract_samples(payload):
 
 @app.route("/")
 def home():
-    current_data = get_live_data()
-
-    return f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Breath AI Cloud</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<style>
-:root {{
-    --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    --card-bg: rgba(30, 41, 59, 0.7);
-    --border-color: rgba(255, 255, 255, 0.08);
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --primary: #10b981;
-    --primary-glow: rgba(16, 185, 129, 0.15);
-    --accent: #3b82f6;
-    --accent-glow: rgba(59, 130, 246, 0.15);
-}}
-
-body {{
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    background: var(--bg-gradient);
-    min-height: 100vh;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-primary);
-    padding: 20px;
-    box-sizing: border-box;
-}}
-
-.card {{
-    width: 100%;
-    max-width: 800px;
-    background: var(--card-bg);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--border-color);
-    border-radius: 24px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-    overflow: hidden;
-    transition: transform 0.3s ease;
-}}
-
-.header {{
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%);
-    border-bottom: 1px solid var(--border-color);
-    padding: 32px 24px;
-    text-align: center;
-}}
-
-.header h1 {{
-    margin: 0;
-    font-size: 2.2rem;
-    font-weight: 800;
-    letter-spacing: -0.05em;
-    background: linear-gradient(to right, #34d399, #3b82f6);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}}
-
-.header p {{
-    margin: 8px 0 0 0;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    font-weight: 500;
-}}
-
-.main-sections {{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-    padding: 24px;
-}}
-
-@media (max-width: 600px) {{
-    .main-sections {{
-        grid-template-columns: 1fr;
-    }}
-}}
-
-.section {{
-    padding: 24px;
-    background: rgba(15, 23, 42, 0.4);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    position: relative;
-    overflow: hidden;
-}}
-
-.section::before {{
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 4px;
-    height: 100%;
-}}
-
-.section.posture-sec::before {{
-    background: var(--accent);
-}}
-
-.section.bpm-sec::before {{
-    background: var(--primary);
-}}
-
-.section h3 {{
-    margin: 0 0 12px 0;
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}}
-
-.live-indicator {{
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--primary);
-    box-shadow: 0 0 0 0 var(--primary-glow);
-    animation: pulse 1.5s infinite;
-}}
-
-@keyframes pulse {{
-    0% {{
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
-    }}
-    70% {{
-        transform: scale(1);
-        box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
-    }}
-    100% {{
-        transform: scale(0.95);
-        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-    }}
-}}
-
-.big {{
-    font-size: 2.8rem;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: -0.02em;
-    min-height: 56px;
-    display: flex;
-    align-items: center;
-}}
-
-.posture-sec .big {{
-    color: #3b82f6;
-    text-shadow: 0 0 20px var(--accent-glow);
-}}
-
-.bpm-sec .big {{
-    color: #10b981;
-    text-shadow: 0 0 20px var(--primary-glow);
-}}
-
-.grid {{
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    padding: 0 24px 24px 24px;
-}}
-
-.box {{
-    background: rgba(15, 23, 42, 0.3);
-    border: 1px solid var(--border-color);
-    padding: 16px;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--text-secondary);
-    letter-spacing: 0.05em;
-    transition: background 0.2s ease;
-}}
-
-.box:hover {{
-    background: rgba(15, 23, 42, 0.5);
-}}
-
-.value {{
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-top: 4px;
-    font-family: monospace;
-}}
-
-.footer {{
-    padding: 16px 24px;
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    text-align: center;
-    border-top: 1px solid var(--border-color);
-    background: rgba(15, 23, 42, 0.2);
-}}
-</style>
-</head>
-<body>
-<div class="card">
-    <div class="header">
-        <h1>Breath AI Cloud</h1>
-        <p>Real-time Posture & Breath Monitor</p>
-    </div>
-    
-    <div class="main-sections">
-        <div class="section posture-sec">
-            <h3>Tư thế hiện tại</h3>
-            <div class="big" id="posture">{current_data["posture"]}</div>
-        </div>
-        <div class="section bpm-sec">
-            <h3>Nhịp thở AI <span class="live-indicator"></span></h3>
-            <div class="big" id="bpm">{current_data["bpm"]}</div>
-        </div>
-    </div>
-
-    <div class="grid">
-        <div class="box">AX <div class="value" id="val-ax">{current_data["ax"]}</div></div>
-        <div class="box">AY <div class="value" id="val-ay">{current_data["ay"]}</div></div>
-        <div class="box">AZ <div class="value" id="val-az">{current_data["az"]}</div></div>
-        <div class="box">GX <div class="value" id="val-gx">{current_data["gx"]}</div></div>
-        <div class="box">GY <div class="value" id="val-gy">{current_data["gy"]}</div></div>
-        <div class="box">GZ <div class="value" id="val-gz">{current_data["gz"]}</div></div>
-    </div>
-    <div class="footer" id="last-update">Last Update: {current_data["time"]}</div>
-</div>
-
-<script>
-function updateData() {{
-    fetch('/current')
-        .then(response => response.json())
-        .then(data => {{
-            document.getElementById('posture').innerText = data.posture;
-            document.getElementById('bpm').innerText = data.bpm;
-            document.getElementById('val-ax').innerText = data.ax;
-            document.getElementById('val-ay').innerText = data.ay;
-            document.getElementById('val-az').innerText = data.az;
-            document.getElementById('val-gx').innerText = data.gx;
-            document.getElementById('val-gy').innerText = data.gy;
-            document.getElementById('val-gz').innerText = data.gz;
-            document.getElementById('last-update').innerText = "Last Update: " + data.time;
-        }})
-        .catch(error => console.error('Error fetching data:', error));
-}}
-setInterval(updateData, 1000);
-</script>
-</body>
-</html>
-"""
+    return render_template("index.html")
 
 # ==================================================
 # API ROUTES
@@ -591,6 +424,7 @@ def status():
         "model": MODEL_OK,
         "backend": MODEL_BACKEND,
         "model_error": MODEL_ERROR,
+        "classes_bpm": classes_bpm,
         "input_shape": (
             input_details[0]["shape"].tolist() if input_details else None
         ),
@@ -615,7 +449,8 @@ def test():
         "model_error": MODEL_ERROR,
         "buffer_size": len(buffer),
         "window_size": WINDOW_SIZE,
-        "features": N_FEATURES
+        "features": N_FEATURES,
+        "classes_bpm": classes_bpm
     })
 
 
@@ -645,23 +480,36 @@ def posture():
 
         ax, ay, az, gx, gy, gz = last_values
         posture_result = detect_posture(ax, ay, az)
-        bpm = predict_bpm()
+        bpm_result = predict_bpm()
 
         latest_data = {
             "posture": posture_result,
-            "bpm": bpm,
+            "bpm": bpm_result.get("bpm", "—"),
             "ax": round(ax, 3),
             "ay": round(ay, 3),
             "az": round(az, 3),
             "gx": round(gx, 3),
             "gy": round(gy, 3),
             "gz": round(gz, 3),
-            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "method": bpm_result.get("method", "-"),
+            "expected_bpm": bpm_result.get("expected_bpm"),
+            "argmax_bpm": bpm_result.get("argmax_bpm"),
+            "confidence": bpm_result.get("confidence"),
+            "probabilities": bpm_result.get("probabilities", [0.0] * len(classes_bpm)),
+            "fft_bpm": bpm_result.get("fft_bpm"),
+            "fft_confidence": bpm_result.get("fft_confidence"),
+            "spectral_power": bpm_result.get("spectral_power"),
+            "signal_status": bpm_result.get("status", "-"),
+            "buffer_size": len(buffer)
         }
         last_data_at = time.monotonic()
 
         print({
-            **latest_data,
+            "posture": posture_result,
+            "bpm": bpm_result.get("bpm"),
+            "method": bpm_result.get("method"),
+            "confidence": bpm_result.get("confidence"),
             "received": len(samples),
             "buffer": len(buffer)
         })
@@ -669,7 +517,12 @@ def posture():
         return jsonify({
             "success": True,
             "posture": posture_result,
-            "bpm": bpm,
+            "bpm": bpm_result.get("bpm"),
+            "method": bpm_result.get("method", "-"),
+            "expected_bpm": bpm_result.get("expected_bpm"),
+            "argmax_bpm": bpm_result.get("argmax_bpm"),
+            "confidence": bpm_result.get("confidence"),
+            "probabilities": bpm_result.get("probabilities", []),
             "buffer": len(buffer),
             "received": len(samples)
         })
