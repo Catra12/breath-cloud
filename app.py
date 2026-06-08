@@ -130,23 +130,23 @@ def detect_posture(ax, ay, az):
         and abs(ax) < 0.4
         and abs(ay) < 0.4
     ):
-        return "NAM"
+        return "NẰM"
 
     if (
         abs(ay - g) < threshold
         and abs(ax) < 0.4
         and abs(az) < 0.4
     ):
-        return "NAM_NGHIENG"
+        return "NẰM NGHIÊNG"
 
     if (
         abs(ax - g) < threshold
         and abs(ay) < 0.4
         and abs(az) < 0.4
     ):
-        return "DUNG"
+        return "ĐỨNG"
 
-    return "NGOI"
+    return "NGỒI"
 
 # ==================================================
 # PREPROCESSING & AI BPM
