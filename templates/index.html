@@ -1,675 +1,629 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="Real-time AI breathing rate and posture monitoring dashboard powered by TFLite classification model." />
-  <title>Breath AI Cloud — Real-time Monitor</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description"
+        content="Real-time AI breathing rate and posture monitoring dashboard powered by TFLite classification model." />
+    <title>Breath AI Cloud — Real-time Monitor</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <style>
-    :root {
-      --bg-primary: #060c18;
-      --bg-secondary: #0d1526;
-      --glass-bg: rgba(15, 25, 50, 0.65);
-      --glass-border: rgba(255, 255, 255, 0.07);
-      --glass-highlight: rgba(255, 255, 255, 0.03);
-      --text-primary: #f0f4ff;
-      --text-secondary: #7a8fb5;
-      --text-muted: #3d5080;
-      --green: #10e68a;
-      --green-dim: rgba(16, 230, 138, 0.12);
-      --green-glow: rgba(16, 230, 138, 0.35);
-      --blue: #4f8fff;
-      --blue-dim: rgba(79, 143, 255, 0.12);
-      --blue-glow: rgba(79, 143, 255, 0.3);
-      --purple: #a78bfa;
-      --yellow: #fbbf24;
-      --red: #f87171;
-      --radius-lg: 20px;
-      --radius-md: 14px;
-      --radius-sm: 10px;
-      --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
-      --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    }
+    <style>
+        :root {
+            --bg-primary: #060c18;
+            --bg-secondary: #0d1526;
+            --glass-bg: rgba(15, 25, 50, 0.65);
+            --glass-border: rgba(255, 255, 255, 0.07);
+            --glass-highlight: rgba(255, 255, 255, 0.03);
+            --text-primary: #f0f4ff;
+            --text-secondary: #7a8fb5;
+            --text-muted: #3d5080;
+            --green: #10e68a;
+            --green-dim: rgba(16, 230, 138, 0.12);
+            --green-glow: rgba(16, 230, 138, 0.35);
+            --blue: #4f8fff;
+            --blue-dim: rgba(79, 143, 255, 0.12);
+            --blue-glow: rgba(79, 143, 255, 0.3);
+            --purple: #a78bfa;
+            --yellow: #fbbf24;
+            --red: #f87171;
+            --radius-lg: 20px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+            --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    body {
-      font-family: 'Plus Jakarta Sans', sans-serif;
-      background: var(--bg-primary);
-      background-image:
-        radial-gradient(ellipse 80% 50% at 20% 10%, rgba(79, 143, 255, 0.08) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 40% at 80% 90%, rgba(16, 230, 138, 0.06) 0%, transparent 55%);
-      min-height: 100vh;
-      color: var(--text-primary);
-      padding: 20px;
-    }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg-primary);
+            background-image:
+                radial-gradient(ellipse 80% 50% at 20% 10%, rgba(79, 143, 255, 0.08) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 40% at 80% 90%, rgba(16, 230, 138, 0.06) 0%, transparent 55%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            padding: 20px;
+        }
 
-    /* ─── LAYOUT ─────────────────────────────────── */
-    .app {
-      max-width: 1080px;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
+        /* ─── LAYOUT ─────────────────────────────────── */
+        .app {
+            max-width: 1080px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
 
-    /* ─── HEADER ─────────────────────────────────── */
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
-      padding: 24px 28px;
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--radius-lg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-    }
+        /* ─── HEADER ─────────────────────────────────── */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 24px 28px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
 
-    .header-brand {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
 
-    .logo-ring {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, var(--green), var(--blue));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 0 18px var(--green-glow);
-      flex-shrink: 0;
-    }
+        .logo-ring {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--green), var(--blue));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 18px var(--green-glow);
+            flex-shrink: 0;
+        }
 
-    .logo-ring svg { width: 22px; height: 22px; fill: #fff; }
+        .logo-ring svg {
+            width: 22px;
+            height: 22px;
+            fill: #fff;
+        }
 
-    .brand-text h1 {
-      font-size: 1.25rem;
-      font-weight: 800;
-      background: linear-gradient(90deg, var(--green), var(--blue));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      letter-spacing: -0.03em;
-    }
+        .brand-text h1 {
+            font-size: 1.25rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, var(--green), var(--blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.03em;
+        }
 
-    .brand-text p {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      font-weight: 500;
-      margin-top: 1px;
-    }
+        .brand-text p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            margin-top: 1px;
+        }
 
-    .header-status {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
 
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      border-radius: 99px;
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      border: 1px solid transparent;
-    }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 99px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            border: 1px solid transparent;
+        }
 
-    .badge-green {
-      background: var(--green-dim);
-      color: var(--green);
-      border-color: rgba(16, 230, 138, 0.25);
-    }
+        .badge-green {
+            background: var(--green-dim);
+            color: var(--green);
+            border-color: rgba(16, 230, 138, 0.25);
+        }
 
-    .badge-blue {
-      background: var(--blue-dim);
-      color: var(--blue);
-      border-color: rgba(79, 143, 255, 0.25);
-    }
+        .badge-blue {
+            background: var(--blue-dim);
+            color: var(--blue);
+            border-color: rgba(79, 143, 255, 0.25);
+        }
 
-    .badge-gray {
-      background: rgba(100, 120, 160, 0.1);
-      color: var(--text-secondary);
-      border-color: var(--glass-border);
-    }
+        .badge-gray {
+            background: rgba(100, 120, 160, 0.1);
+            color: var(--text-secondary);
+            border-color: var(--glass-border);
+        }
 
-    .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
+        .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
 
-    .dot-pulse {
-      background: var(--green);
-      animation: dot-pulse 1.6s ease infinite;
-      box-shadow: 0 0 0 0 var(--green-glow);
-    }
+        .dot-pulse {
+            background: var(--green);
+            animation: dot-pulse 1.6s ease infinite;
+            box-shadow: 0 0 0 0 var(--green-glow);
+        }
 
-    @keyframes dot-pulse {
-      0%   { box-shadow: 0 0 0 0 var(--green-glow); }
-      70%  { box-shadow: 0 0 0 7px rgba(16, 230, 138, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(16, 230, 138, 0); }
-    }
+        @keyframes dot-pulse {
+            0% {
+                box-shadow: 0 0 0 0 var(--green-glow);
+            }
 
-    /* ─── HERO METRICS ───────────────────────────── */
-    .hero {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
+            70% {
+                box-shadow: 0 0 0 7px rgba(16, 230, 138, 0);
+            }
 
-    .metric-card {
-      position: relative;
-      padding: 28px 24px;
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--radius-lg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      overflow: hidden;
-      transition: border-color var(--transition), box-shadow var(--transition);
-    }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 230, 138, 0);
+            }
+        }
 
-    .metric-card::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: var(--glass-highlight);
-      pointer-events: none;
-    }
+        /* ─── HERO METRICS ───────────────────────────── */
+        .hero {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
 
-    .metric-card.bpm-card { border-color: rgba(16, 230, 138, 0.2); }
-    .metric-card.bpm-card:hover { border-color: rgba(16, 230, 138, 0.4); box-shadow: 0 0 40px var(--green-dim); }
-    .metric-card.posture-card { border-color: rgba(79, 143, 255, 0.2); }
-    .metric-card.posture-card:hover { border-color: rgba(79, 143, 255, 0.4); box-shadow: 0 0 40px var(--blue-dim); }
+        .metric-card {
+            position: relative;
+            padding: 28px 24px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            overflow: hidden;
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
 
-    .metric-glow {
-      position: absolute;
-      width: 180px;
-      height: 180px;
-      border-radius: 50%;
-      filter: blur(55px);
-      opacity: 0.25;
-      pointer-events: none;
-      right: -40px;
-      bottom: -40px;
-    }
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: var(--glass-highlight);
+            pointer-events: none;
+        }
 
-    .bpm-card .metric-glow { background: var(--green); }
-    .posture-card .metric-glow { background: var(--blue); }
+        .metric-card.bpm-card {
+            border-color: rgba(16, 230, 138, 0.2);
+        }
 
-    .metric-label {
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 14px;
-    }
+        .metric-card.bpm-card:hover {
+            border-color: rgba(16, 230, 138, 0.4);
+            box-shadow: 0 0 40px var(--green-dim);
+        }
 
-    .metric-value {
-      font-size: 3.5rem;
-      font-weight: 800;
-      letter-spacing: -0.04em;
-      line-height: 1;
-      transition: color var(--transition);
-    }
+        .metric-card.posture-card {
+            border-color: rgba(79, 143, 255, 0.2);
+        }
 
-    .bpm-card .metric-value { color: var(--green); text-shadow: 0 0 30px var(--green-glow); }
-    .posture-card .metric-value { color: var(--blue); text-shadow: 0 0 30px var(--blue-glow); }
+        .metric-card.posture-card:hover {
+            border-color: rgba(79, 143, 255, 0.4);
+            box-shadow: 0 0 40px var(--blue-dim);
+        }
 
-    .metric-sub {
-      margin-top: 10px;
-      font-size: 0.72rem;
-      color: var(--text-secondary);
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
+        .metric-glow {
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            filter: blur(55px);
+            opacity: 0.25;
+            pointer-events: none;
+            right: -40px;
+            bottom: -40px;
+        }
 
-    .metric-sub span { display: flex; align-items: center; gap: 4px; }
+        .bpm-card .metric-glow {
+            background: var(--green);
+        }
 
-    /* ─── CHARTS ROW ─────────────────────────────── */
-    .charts-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-    }
+        .posture-card .metric-glow {
+            background: var(--blue);
+        }
 
-    .chart-card {
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--radius-lg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      padding: 22px;
-    }
+        .metric-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
 
-    .chart-title {
-      font-size: 0.72rem;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-secondary);
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+        .metric-value {
+            font-size: 3.5rem;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1;
+            transition: color var(--transition);
+        }
 
-    .chart-title-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-    }
+        .bpm-card .metric-value {
+            color: var(--green);
+            text-shadow: 0 0 30px var(--green-glow);
+        }
 
-    .chart-wrap { position: relative; height: 160px; }
+        .posture-card .metric-value {
+            color: var(--blue);
+            text-shadow: 0 0 30px var(--blue-glow);
+        }
 
-    /* ─── IMU GRID ───────────────────────────────── */
-    .imu-grid {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 10px;
-    }
+        .metric-sub {
+            margin-top: 10px;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
 
-    .imu-box {
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--radius-md);
-      padding: 14px 10px;
-      text-align: center;
-      transition: border-color var(--transition), background var(--transition);
-    }
+        .metric-sub span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
 
-    .imu-box:hover {
-      background: rgba(15, 30, 60, 0.8);
-      border-color: rgba(255, 255, 255, 0.12);
-    }
+        /* ─── CHARTS ROW ─────────────────────────────── */
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
 
-    .imu-label {
-      font-size: 0.65rem;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-    }
+        .chart-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 22px;
+        }
 
-    .imu-value {
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      font-family: 'Courier New', monospace;
-    }
+        .chart-title {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
 
-    /* ─── INFO ROW ───────────────────────────────── */
-    .info-row {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-    }
+        .chart-title-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+        }
 
-    .info-box {
-      background: var(--glass-bg);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--radius-md);
-      padding: 14px 16px;
-    }
+        .chart-wrap {
+            position: relative;
+            height: 160px;
+        }
 
-    .info-box-label {
-      font-size: 0.65rem;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-      margin-bottom: 5px;
-    }
+        /* ─── FOOTER ─────────────────────────────────── */
+        .footer {
+            text-align: center;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            padding: 4px 0 8px;
+        }
 
-    .info-box-value {
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
+        /* ─── RESPONSIVE ─────────────────────────────── */
+        @media (max-width: 720px) {
+            .hero {
+                grid-template-columns: 1fr;
+            }
 
-    /* ─── FOOTER ─────────────────────────────────── */
-    .footer {
-      text-align: center;
-      font-size: 0.7rem;
-      color: var(--text-muted);
-      padding: 4px 0 8px;
-    }
+            .charts-row {
+                grid-template-columns: 1fr;
+            }
 
-    /* ─── RESPONSIVE ─────────────────────────────── */
-    @media (max-width: 720px) {
-      .hero { grid-template-columns: 1fr; }
-      .charts-row { grid-template-columns: 1fr; }
-      .imu-grid { grid-template-columns: repeat(3, 1fr); }
-      .info-row { grid-template-columns: repeat(2, 1fr); }
-      .metric-value { font-size: 2.8rem; }
-    }
+            .metric-value {
+                font-size: 2.8rem;
+            }
+        }
 
-    @media (max-width: 440px) {
-      body { padding: 12px; }
-      .imu-grid { grid-template-columns: repeat(2, 1fr); }
-      .info-row { grid-template-columns: 1fr 1fr; }
-    }
-  </style>
+        @media (max-width: 440px) {
+            body {
+                padding: 12px;
+            }
+        }
+    </style>
 </head>
+
 <body>
 
-<div class="app">
+    <div class="app">
 
-  <!-- ── HEADER ──────────────────────────── -->
-  <header class="header">
-    <div class="header-brand">
-      <div class="logo-ring">
-        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 3c.8 0 1.5.6 1.9 1.4l1.6 4C16 11 16 11.5 16 12c0 2.2-1.8 4-4 4s-4-1.8-4-4c0-.5 0-1 .5-1.6l1.6-4C10.5 5.6 11.2 5 12 5z"/>
-        </svg>
-      </div>
-      <div class="brand-text">
-        <h1>Breath AI Cloud</h1>
-        <p>Real-time Posture &amp; Breathing Monitor</p>
-      </div>
-    </div>
-    <div class="header-status">
-      <div class="badge badge-green" id="badge-model">
-        <span class="dot dot-pulse"></span>
-        <span id="badge-model-text">LOADING...</span>
-      </div>
-      <div class="badge badge-blue" id="badge-buffer">
-        <span>BUF <span id="hdr-buffer">0</span>/500</span>
-      </div>
-      <div class="badge badge-gray" id="badge-time">
-        <span id="hdr-time">—</span>
-      </div>
-    </div>
-  </header>
+        <!-- ── HEADER ──────────────────────────── -->
+        <header class="header">
+            <div class="header-brand">
+                <div class="logo-ring">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                            d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 3c.8 0 1.5.6 1.9 1.4l1.6 4C16 11 16 11.5 16 12c0 2.2-1.8 4-4 4s-4-1.8-4-4c0-.5 0-1 .5-1.6l1.6-4C10.5 5.6 11.2 5 12 5z" />
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h1>Breath AI Cloud</h1>
+                    <p>Real-time Posture &amp; Breathing Monitor</p>
+                </div>
+            </div>
+            <div class="header-status">
+                <div class="badge badge-green" id="badge-model">
+                    <span class="dot dot-pulse"></span>
+                    <span id="badge-model-text">LOADING...</span>
+                </div>
+                <div class="badge badge-blue" id="badge-buffer">
+                    <span>BUF <span id="hdr-buffer">0</span>/500</span>
+                </div>
+                <div class="badge badge-gray" id="badge-time">
+                    <span id="hdr-time">—</span>
+                </div>
+            </div>
+        </header>
 
-  <!-- ── HERO METRICS ────────────────────── -->
-  <section class="hero">
-    <div class="metric-card bpm-card">
-      <div class="metric-glow"></div>
-      <div class="metric-label">
-        <span class="dot dot-pulse"></span>
-        Nhịp Thở AI (BPM)
-      </div>
-      <div class="metric-value" id="bpm-value">—</div>
-      <div class="metric-sub">
-        <span>🎯 Argmax: <strong id="argmax-bpm">—</strong></span>
-        <span>⚡ FFT: <strong id="fft-bpm">—</strong></span>
-        <span>📊 Confidence: <strong id="confidence">—</strong></span>
-        <span>🔍 Method: <strong id="method">—</strong></span>
-      </div>
-    </div>
+        <!-- ── HERO METRICS ────────────────────── -->
+        <section class="hero">
+            <div class="metric-card bpm-card">
+                <div class="metric-glow"></div>
+                <div class="metric-label">
+                    <span class="dot dot-pulse"></span>
+                    Nhịp Thở AI (BPM)
+                </div>
+                <div class="metric-value" id="bpm-value">—</div>
+                <div class="metric-sub">
+                    <span>🎯 Argmax: <strong id="argmax-bpm">—</strong></span>
+                    <span>⚡ FFT: <strong id="fft-bpm">—</strong></span>
+                    <span>📊 Confidence: <strong id="confidence">—</strong></span>
+                    <span>🔍 Method: <strong id="method">—</strong></span>
+                </div>
+            </div>
 
-    <div class="metric-card posture-card">
-      <div class="metric-glow"></div>
-      <div class="metric-label">
-        <span class="dot" style="background:var(--blue);"></span>
-        Tư Thế Cơ Thể
-      </div>
-      <div class="metric-value" id="posture-value">—</div>
-      <div class="metric-sub">
-        <span>📡 Signal: <strong id="signal-status">WAITING</strong></span>
-        <span>🗄️ Buffer: <strong><span id="buf-count">0</span>/500</strong></span>
-      </div>
-    </div>
-  </section>
+            <div class="metric-card posture-card">
+                <div class="metric-glow"></div>
+                <div class="metric-label">
+                    <span class="dot" style="background:var(--blue);"></span>
+                    Tư Thế Cơ Thể
+                </div>
+                <div class="metric-value" id="posture-value">—</div>
+                <div class="metric-sub">
+                    <span>📡 Signal: <strong id="signal-status">WAITING</strong></span>
+                    <span>🗄️ Buffer: <strong><span id="buf-count">0</span>/500</strong></span>
+                </div>
+            </div>
+        </section>
 
-  <!-- ── CHARTS ───────────────────────────── -->
-  <div class="charts-row">
-    <div class="chart-card">
-      <div class="chart-title">
-        <span class="chart-title-dot" style="background:var(--green);"></span>
-        Sóng Tín Hiệu Thở (acc_mag)
-      </div>
-      <div class="chart-wrap">
-        <canvas id="wave-chart"></canvas>
-      </div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">
-        <span class="chart-title-dot" style="background:var(--purple);"></span>
-        Phân Phối AI — 9 Lớp BPM
-      </div>
-      <div class="chart-wrap">
-        <canvas id="prob-chart"></canvas>
-      </div>
-    </div>
-  </div>
+        <!-- ── CHARTS ───────────────────────────── -->
+        <div class="charts-row">
+            <div class="chart-card">
+                <div class="chart-title">
+                    <span class="chart-title-dot" style="background:var(--green);"></span>
+                    Sóng Tín Hiệu Thở (acc_mag)
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="wave-chart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-title">
+                    <span class="chart-title-dot" style="background:var(--purple);"></span>
+                    Phân Phối AI — 9 Lớp BPM
+                </div>
+                <div class="chart-wrap">
+                    <canvas id="prob-chart"></canvas>
+                </div>
+            </div>
+        </div>
 
-  <!-- ── IMU GRID ──────────────────────────── -->
-  <div class="imu-grid">
-    <div class="imu-box"><div class="imu-label">AX</div><div class="imu-value" id="val-ax">—</div></div>
-    <div class="imu-box"><div class="imu-label">AY</div><div class="imu-value" id="val-ay">—</div></div>
-    <div class="imu-box"><div class="imu-label">AZ</div><div class="imu-value" id="val-az">—</div></div>
-    <div class="imu-box"><div class="imu-label">GX</div><div class="imu-value" id="val-gx">—</div></div>
-    <div class="imu-box"><div class="imu-label">GY</div><div class="imu-value" id="val-gy">—</div></div>
-    <div class="imu-box"><div class="imu-label">GZ</div><div class="imu-value" id="val-gz">—</div></div>
-  </div>
+        <div class="footer" id="footer-status">Kết nối tới máy chủ...</div>
 
-  <!-- ── INFO ROW ──────────────────────────── -->
-  <div class="info-row">
-    <div class="info-box">
-      <div class="info-box-label">Spectral Power</div>
-      <div class="info-box-value" id="spectral-power">—</div>
-    </div>
-    <div class="info-box">
-      <div class="info-box-label">FFT Confidence</div>
-      <div class="info-box-value" id="fft-confidence">—</div>
-    </div>
-    <div class="info-box">
-      <div class="info-box-label">Expected BPM</div>
-      <div class="info-box-value" id="expected-bpm">—</div>
-    </div>
-    <div class="info-box">
-      <div class="info-box-label">Last Update</div>
-      <div class="info-box-value" id="last-update">—</div>
-    </div>
-  </div>
+    </div><!-- /.app -->
 
-  <div class="footer" id="footer-status">Kết nối tới máy chủ...</div>
+    <script>
+        /* ────────────────────────────────────────────────────
+           CHART.JS SETUP
+        ──────────────────────────────────────────────────── */
+        Chart.defaults.color = '#7a8fb5';
+        Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+        Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
 
-</div><!-- /.app -->
+        const BPM_CLASSES = [12, 13, 14, 15, 16, 17, 18, 19, 20];
+        const WAVE_LEN = 100;
+        const waveData = Array(WAVE_LEN).fill(null);
 
-<script>
-/* ────────────────────────────────────────────────────
-   CHART.JS SETUP
-──────────────────────────────────────────────────── */
-Chart.defaults.color = '#7a8fb5';
-Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
-Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+        /* Wave Chart */
+        const waveCtx = document.getElementById('wave-chart').getContext('2d');
+        const waveGrad = waveCtx.createLinearGradient(0, 0, 0, 160);
+        waveGrad.addColorStop(0, 'rgba(16, 230, 138, 0.35)');
+        waveGrad.addColorStop(1, 'rgba(16, 230, 138, 0)');
 
-const BPM_CLASSES = [12, 13, 14, 15, 16, 17, 18, 19, 20];
-const WAVE_LEN = 100;
-const waveData = Array(WAVE_LEN).fill(null);
+        const waveChart = new Chart(waveCtx, {
+            type: 'line',
+            data: {
+                labels: Array(WAVE_LEN).fill(''),
+                datasets: [{
+                    data: waveData,
+                    borderColor: '#10e68a',
+                    backgroundColor: waveGrad,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                animation: { duration: 0 },
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                scales: {
+                    x: { display: false },
+                    y: {
+                        display: true,
+                        grid: { color: 'rgba(255,255,255,0.04)' },
+                        ticks: { maxTicksLimit: 5, font: { size: 10 } }
+                    }
+                },
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
 
-/* Wave Chart */
-const waveCtx = document.getElementById('wave-chart').getContext('2d');
-const waveGrad = waveCtx.createLinearGradient(0, 0, 0, 160);
-waveGrad.addColorStop(0, 'rgba(16, 230, 138, 0.35)');
-waveGrad.addColorStop(1, 'rgba(16, 230, 138, 0)');
+        /* Probability Chart */
+        const probCtx = document.getElementById('prob-chart').getContext('2d');
+        const probColors = BPM_CLASSES.map((_, i) =>
+            `hsl(${160 + i * 18}, 80%, 60%)`
+        );
 
-const waveChart = new Chart(waveCtx, {
-  type: 'line',
-  data: {
-    labels: Array(WAVE_LEN).fill(''),
-    datasets: [{
-      data: waveData,
-      borderColor: '#10e68a',
-      backgroundColor: waveGrad,
-      borderWidth: 2,
-      pointRadius: 0,
-      fill: true,
-      tension: 0.4
-    }]
-  },
-  options: {
-    animation: { duration: 0 },
-    plugins: { legend: { display: false }, tooltip: { enabled: false } },
-    scales: {
-      x: { display: false },
-      y: {
-        display: true,
-        grid: { color: 'rgba(255,255,255,0.04)' },
-        ticks: { maxTicksLimit: 5, font: { size: 10 } }
-      }
-    },
-    responsive: true,
-    maintainAspectRatio: false
-  }
-});
+        const probChart = new Chart(probCtx, {
+            type: 'bar',
+            data: {
+                labels: BPM_CLASSES.map(b => b + ' BPM'),
+                datasets: [{
+                    data: Array(9).fill(0),
+                    backgroundColor: probColors.map(c => c.replace('60%', '40%').replace('hsl', 'hsla').replace(')', ', 0.7)')),
+                    borderColor: probColors,
+                    borderWidth: 2,
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                animation: { duration: 200 },
+                plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                    y: {
+                        min: 0,
+                        max: 1,
+                        grid: { color: 'rgba(255,255,255,0.04)' },
+                        ticks: { maxTicksLimit: 5, font: { size: 10 }, callback: v => (v * 100).toFixed(0) + '%' }
+                    }
+                },
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
 
-/* Probability Chart */
-const probCtx = document.getElementById('prob-chart').getContext('2d');
-const probColors = BPM_CLASSES.map((_, i) =>
-  `hsl(${160 + i * 18}, 80%, 60%)`
-);
+        /* ────────────────────────────────────────────────────
+           STATUS CHECK (model info once on load)
+        ──────────────────────────────────────────────────── */
+        async function fetchStatus() {
+            try {
+                const r = await fetch('/status');
+                const d = await r.json();
+                const modelOk = d.model === true;
+                const badgeEl = document.getElementById('badge-model');
+                const badgeTxt = document.getElementById('badge-model-text');
+                if (modelOk) {
+                    badgeEl.className = 'badge badge-green';
+                    badgeTxt.textContent = 'AI MODEL OK';
+                } else {
+                    badgeEl.className = 'badge';
+                    badgeEl.style.background = 'rgba(248,113,113,0.12)';
+                    badgeEl.style.color = '#f87171';
+                    badgeEl.style.borderColor = 'rgba(248,113,113,0.3)';
+                    badgeTxt.textContent = 'MODEL FAILED';
+                }
+            } catch (e) { /* silent */ }
+        }
 
-const probChart = new Chart(probCtx, {
-  type: 'bar',
-  data: {
-    labels: BPM_CLASSES.map(b => b + ' BPM'),
-    datasets: [{
-      data: Array(9).fill(0),
-      backgroundColor: probColors.map(c => c.replace('60%', '40%').replace('hsl', 'hsla').replace(')', ', 0.7)')),
-      borderColor: probColors,
-      borderWidth: 2,
-      borderRadius: 6,
-    }]
-  },
-  options: {
-    animation: { duration: 200 },
-    plugins: { legend: { display: false }, tooltip: { enabled: true } },
-    scales: {
-      x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-      y: {
-        min: 0,
-        max: 1,
-        grid: { color: 'rgba(255,255,255,0.04)' },
-        ticks: { maxTicksLimit: 5, font: { size: 10 }, callback: v => (v * 100).toFixed(0) + '%' }
-      }
-    },
-    responsive: true,
-    maintainAspectRatio: false
-  }
-});
+        /* ────────────────────────────────────────────────────
+           MAIN POLLING LOOP
+        ──────────────────────────────────────────────────── */
+        let lastAz = 0;
 
-/* ────────────────────────────────────────────────────
-   STATUS CHECK (model info once on load)
-──────────────────────────────────────────────────── */
-async function fetchStatus() {
-  try {
-    const r = await fetch('/status');
-    const d = await r.json();
-    const modelOk = d.model === true;
-    const badgeEl = document.getElementById('badge-model');
-    const badgeTxt = document.getElementById('badge-model-text');
-    if (modelOk) {
-      badgeEl.className = 'badge badge-green';
-      badgeTxt.textContent = 'AI MODEL OK';
-    } else {
-      badgeEl.className = 'badge';
-      badgeEl.style.background = 'rgba(248,113,113,0.12)';
-      badgeEl.style.color = '#f87171';
-      badgeEl.style.borderColor = 'rgba(248,113,113,0.3)';
-      badgeTxt.textContent = 'MODEL FAILED';
-    }
-  } catch (e) { /* silent */ }
-}
+        function fmt(v, dec = 3) {
+            if (v === null || v === undefined) return '—';
+            if (typeof v === 'number') return v.toFixed(dec);
+            return String(v);
+        }
 
-/* ────────────────────────────────────────────────────
-   MAIN POLLING LOOP
-──────────────────────────────────────────────────── */
-let lastAz = 0;
+        async function updateData() {
+            try {
+                const r = await fetch('/current');
+                const d = await r.json();
 
-function fmt(v, dec = 3) {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'number') return v.toFixed(dec);
-  return String(v);
-}
+                /* ── BPM & posture ── */
+                document.getElementById('bpm-value').textContent = d.bpm ?? '—';
+                document.getElementById('posture-value').textContent = d.posture ?? '—';
+                document.getElementById('argmax-bpm').textContent = d.argmax_bpm != null ? d.argmax_bpm + ' bpm' : '—';
+                document.getElementById('fft-bpm').textContent = d.fft_bpm != null ? d.fft_bpm + ' bpm' : '—';
+                document.getElementById('confidence').textContent = d.confidence != null ? (d.confidence * 100).toFixed(1) + '%' : '—';
+                document.getElementById('method').textContent = d.method ?? '—';
+                document.getElementById('signal-status').textContent = d.signal_status ?? '—';
 
-async function updateData() {
-  try {
-    const r = await fetch('/current');
-    const d = await r.json();
+                /* ── buffer ── */
+                const buf = d.buffer_size ?? 0;
+                document.getElementById('buf-count').textContent = buf;
+                document.getElementById('hdr-buffer').textContent = buf;
 
-    /* ── BPM & posture ── */
-    document.getElementById('bpm-value').textContent    = d.bpm ?? '—';
-    document.getElementById('posture-value').textContent = d.posture ?? '—';
-    document.getElementById('argmax-bpm').textContent   = d.argmax_bpm != null ? d.argmax_bpm + ' bpm' : '—';
-    document.getElementById('fft-bpm').textContent      = d.fft_bpm != null ? d.fft_bpm + ' bpm' : '—';
-    document.getElementById('confidence').textContent   = d.confidence != null ? (d.confidence * 100).toFixed(1) + '%' : '—';
-    document.getElementById('method').textContent       = d.method ?? '—';
-    document.getElementById('signal-status').textContent = d.signal_status ?? '—';
+                /* ── header time ── */
+                document.getElementById('hdr-time').textContent = d.time ?? '—';
 
-    /* ── buffer ── */
-    const buf = d.buffer_size ?? 0;
-    document.getElementById('buf-count').textContent  = buf;
-    document.getElementById('hdr-buffer').textContent = buf;
+                /* ── footer ── */
+                document.getElementById('footer-status').textContent =
+                    `Breath AI Cloud • ${d.time ?? '—'} • Buf ${buf}/500`;
 
-    /* ── IMU ── */
-    document.getElementById('val-ax').textContent = fmt(d.ax);
-    document.getElementById('val-ay').textContent = fmt(d.ay);
-    document.getElementById('val-az').textContent = fmt(d.az);
-    document.getElementById('val-gx').textContent = fmt(d.gx);
-    document.getElementById('val-gy').textContent = fmt(d.gy);
-    document.getElementById('val-gz').textContent = fmt(d.gz);
+                /* ── probability bar chart ── */
+                if (Array.isArray(d.probabilities) && d.probabilities.length === 9) {
+                    probChart.data.datasets[0].data = d.probabilities;
+                    probChart.update();
+                }
 
-    /* ── info ── */
-    document.getElementById('spectral-power').textContent = fmt(d.spectral_power, 3);
-    document.getElementById('fft-confidence').textContent = d.fft_confidence != null ? (d.fft_confidence * 100).toFixed(2) + '%' : '—';
-    document.getElementById('expected-bpm').textContent  = d.expected_bpm != null ? d.expected_bpm + ' bpm' : '—';
-    document.getElementById('last-update').textContent   = d.time ?? '—';
-    document.getElementById('hdr-time').textContent      = d.time ?? '—';
+                /* ── wave chart — use az as breathing proxy ── */
+                const azVal = typeof d.az === 'number' ? d.az : lastAz;
+                lastAz = azVal;
+                waveData.push(azVal);
+                if (waveData.length > WAVE_LEN) waveData.shift();
+                waveChart.data.datasets[0].data = [...waveData];
+                waveChart.update();
 
-    /* ── footer ── */
-    document.getElementById('footer-status').textContent =
-      `Breath AI Cloud • ${d.time ?? '—'} • Buf ${buf}/500`;
+            } catch (e) {
+                document.getElementById('footer-status').textContent = '⚠ Không thể kết nối tới server — ' + new Date().toLocaleTimeString();
+            }
+        }
 
-    /* ── probability bar chart ── */
-    if (Array.isArray(d.probabilities) && d.probabilities.length === 9) {
-      probChart.data.datasets[0].data = d.probabilities;
-      probChart.update();
-    }
-
-    /* ── wave chart — use az as breathing proxy ── */
-    const azVal = typeof d.az === 'number' ? d.az : lastAz;
-    lastAz = azVal;
-    waveData.push(azVal);
-    if (waveData.length > WAVE_LEN) waveData.shift();
-    waveChart.data.datasets[0].data = [...waveData];
-    waveChart.update();
-
-  } catch (e) {
-    document.getElementById('footer-status').textContent = '⚠ Không thể kết nối tới server — ' + new Date().toLocaleTimeString();
-  }
-}
-
-fetchStatus();
-updateData();
-setInterval(updateData, 1000);
-</script>
+        fetchStatus();
+        updateData();
+        setInterval(updateData, 1000);
+    </script>
 </body>
+
 </html>
