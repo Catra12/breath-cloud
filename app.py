@@ -206,19 +206,20 @@ def detect_posture(ax, ay, az):
     if ay <= -0.50 and abs(ax) < 0.45:
         return "nằm nghiêng phải"
 
-    # 5. NGỒI TỰA LƯNG: Lưng ngả ra sau tựa vào ghế
-    # Bắt nhạy ngay khi chip chỉ cần ngửa nhẹ ra sau (az >= 0.04g, tương đương góc ngửa từ ~2.3 độ trở lên)
-    # Khi ngả lưng: ngực hướng chếch lên nên az luôn dương, ax từ 0.35g đến 1.00g
-    if az >= 0.04 and ax >= 0.35 and abs(ay) < 0.50:
+    # 5. NGỒI TỰA LƯNG: Lưng ngả sâu ra sau tựa vào ghế (như khi nghỉ ngơi thư giãn)
+    # Góc ngả từ ~16 độ trở lên (az >= 0.28g, ví dụ trong ảnh user ax=0.92, az=0.50 tương đương ~30 độ)
+    if az >= 0.28 and ax >= 0.35 and abs(ay) < 0.50:
         return "ngồi tựa lưng"
 
-    # 6. NGỒI THẲNG / NGỒI LÀM VIỆC: Người ngồi ghế làm việc bình thường
-    # Khi ngồi làm việc, cơ thể thường hơi cúi nhẹ về phía trước (-0.30 <= az < 0.04) hoặc ax từ 0.50g đến 0.96g
-    if -0.30 <= az < 0.04 and 0.50 <= ax < 0.97 and abs(ay) < 0.45:
+    # 6. NGỒI THẲNG / NGỒI BÌNH THƯỜNG: Người ngồi trên ghế làm việc bình thường
+    # - Khi đưa chip đứng lên một chút (ngả nhẹ tự nhiên từ 3.5° đến 16°, az từ 0.06g đến 0.28g)
+    # - Hoặc khi ngồi làm việc hơi cúi nhẹ về bàn (-0.25g <= az < 0.06g và ax < 0.98g)
+    if (0.06 <= az < 0.28 and ax >= 0.50 and abs(ay) < 0.50) or \
+       (-0.25 <= az < 0.06 and 0.50 <= ax < 0.98 and abs(ay) < 0.45):
         return "ngồi"
 
-    # 7. ĐỨNG THẲNG: Chỉ khi cơ thể đứng thẳng tự nhiên (ax >= 0.97g, lưng thẳng tuyệt đối không ngửa |az| < 0.04g)
-    if ax >= 0.97 and abs(az) < 0.04 and abs(ay) < 0.25:
+    # 7. ĐỨNG THẲNG: Chỉ khi cơ thể đứng thẳng tự nhiên (|az| < 0.06g và ax >= 0.98g, sai số lệch < 3.5 độ)
+    if ax >= 0.98 and abs(az) < 0.06 and abs(ay) < 0.25:
         return "đứng"
 
     # Mặc định suy luận dựa trên trục có giá trị tuyệt đối lớn nhất
@@ -230,9 +231,9 @@ def detect_posture(ax, ay, az):
     elif abs_y > abs_x and abs_y > abs_z:
         return "nằm nghiêng trái" if ay > 0 else "nằm nghiêng phải"
     elif abs_x > abs_y and abs_x > abs_z:
-        if az >= 0.04:
+        if az >= 0.28:
             return "ngồi tựa lưng"
-        if ax >= 0.97 and abs(az) < 0.04:
+        if ax >= 0.98 and abs(az) < 0.06:
             return "đứng"
         return "ngồi"
 
