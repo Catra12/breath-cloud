@@ -1,9 +1,24 @@
+import sys
+if sys.platform.startswith("win"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from datetime import datetime
 import time
 
 import joblib
 import numpy as np
 from flask import Flask, jsonify, request, render_template
+
+from email_service import (
+    send_fall_alert_email,
+    send_test_email,
+    load_env_vars,
+    save_env_vars
+)
 
 app = Flask(__name__)
 
@@ -21,20 +36,22 @@ scaler = None
 
 Interpreter = None
 try:
-    import tensorflow as tf
-    Interpreter = tf.lite.Interpreter
+    from ai_edge_litert.interpreter import Interpreter
 except ImportError:
     try:
-        import tflite_runtime.interpreter as tflite
-        Interpreter = tflite.Interpreter
+        from tflite_runtime.interpreter import Interpreter
     except ImportError:
-        Interpreter = None
+        try:
+            import tensorflow as tf
+            Interpreter = tf.lite.Interpreter
+        except (ImportError, AttributeError):
+            Interpreter = None
 
 try:
     scaler = joblib.load("modelAI/breath_scaler_v3.joblib")
 
     if Interpreter is None:
-        raise ImportError("Neither tensorflow nor tflite_runtime is installed.")
+        raise ImportError("Neither ai_edge_litert, tflite_runtime, nor tensorflow is installed.")
 
     interpreter = Interpreter(model_path="modelAI/breath_v3.tflite")
     interpreter.allocate_tensors()
@@ -77,6 +94,12 @@ MIN_BREATH_BAND_RATIO = 0.25
 BREATH_FREQ_MIN = 0.10
 BREATH_FREQ_MAX = 0.55
 
+# Cấu hình ngưỡng phát hiện té ngã (Fall Detection)
+FALL_IMPACT_THRESHOLD_G = 2.4     # Ngưỡng va đập cực đại SVM
+FALL_FREE_FALL_THRESHOLD_G = 0.65  # Ngưỡng rơi tự do
+FALL_GYRO_MAG_THRESHOLD = 2.0      # Ngưỡng vận tốc góc biến thiên mạnh (rad/s)
+FALL_EMAIL_COOLDOWN_SECONDS = 45   # Thời gian chờ giữa 2 lần gửi email để chống spam
+
 # Precomputed FFT constants and BPM classes
 freqs = np.fft.rfftfreq(WINDOW_SIZE, d=1.0 / FS)
 breath_mask = (freqs >= 0.10) & (freqs <= 0.55)   # 6-33 BPM
@@ -86,6 +109,20 @@ classes_bpm = [12, 13, 14, 15, 16, 17, 18, 19, 20]
 
 # Stores 8-element raw data: ax, ay, az, gx, gy, gz, acc_mag, gyro_mag
 buffer = []
+
+# Buffer ngắn hạn theo dõi va đập và rơi tự do trong 25 mẫu gần nhất (~1 giây)
+recent_samples_buffer = []
+
+# Trạng thái cảnh báo té ngã
+fall_state = {
+    "alert": False,
+    "time": None,
+    "impact_g": 0.0,
+    "posture_after": None,
+    "email_status": "Chưa có sự cố",
+    "last_email_time": 0.0,
+    "dismissed": False
+}
 
 # ==================================================
 # DATA
@@ -110,43 +147,156 @@ DEFAULT_DATA = {
     "fft_confidence": None,
     "spectral_power": None,
     "signal_status": "WAITING",
-    "buffer_size": 0
+    "buffer_size": 0,
+    "fall_alert": False,
+    "impact_g": 0.0,
+    "fall_time": None,
+    "posture_detail": "WAITING",
+    "email_status": "Sẵn sàng"
 }
 
 latest_data = DEFAULT_DATA.copy()
 last_data_at = None
 
 # ==================================================
-# POSTURE
+# POSTURE DETECTION (NÂNG CAO CHO CẢM BIẾN Ở NGỰC)
 # ==================================================
 
 
 def detect_posture(ax, ay, az):
-    g = 1.0
-    threshold = 0.2
+    """
+    Nhận diện tư thế chi tiết khi cảm biến MPU6050 gắn trước ngực:
+    - Nằm ngửa (ngực hướng lên trời: az ~ +1g)
+    - Nằm úp (ngực ép xuống giường: az ~ -1g)
+    - Nằm úp mặt xuống bàn (ngồi ghế gập người, ngực/mặt tì úp xuống bàn)
+    - Nằm nghiêng trái / Nằm nghiêng phải (trọng lực dồn sang trục Y: ay ~ ±1g)
+    - Đứng thẳng (thân thẳng đứng: ax ~ +1g)
+    - Ngồi thẳng / Ngồi tựa lưng
+    """
+    # Tự động nhận diện và chuẩn hóa nếu chip gửi m/s² (~9.8) hoặc raw ADC (~16384)
+    mag = float(np.sqrt(ax**2 + ay**2 + az**2))
+    if 5.0 < mag < 50.0:
+        ax, ay, az = ax / 9.80665, ay / 9.80665, az / 9.80665
+    elif mag > 1000.0:
+        ax, ay, az = ax / 16384.0, ay / 16384.0, az / 16384.0
 
-    if (
-        abs(az - g) < threshold
-        and abs(ax) < 0.4
-        and abs(ay) < 0.4
-    ):
-        return "nằm"
+    # 1. NẰM ÚP MẶT XUỐNG BÀN (Gục đầu / ngực úp xuống mặt bàn làm việc)
+    # Đặc điểm: Thân trên gập về phía trước tì lên bàn ngang, ngực hướng xuống đất (az âm),
+    # nhưng thân vẫn có độ nghiêng do ngồi tại ghế (ax trong khoảng 0.12 - 0.65g)
+    if az <= -0.40 and 0.12 <= ax <= 0.65 and abs(ay) < 0.55:
+        return "úp mặt xuống bàn"
 
-    if (
-        abs(ay - g) < threshold
-        and abs(ax) < 0.4
-        and abs(az) < 0.4
-    ):
-        return "nằm nghiêng"
+    # 2. NẰM NGỬA: Ngực hướng thẳng lên trời (trục Z dương lớn)
+    if az >= 0.65 and abs(ax) < 0.50 and abs(ay) < 0.50:
+        return "nằm ngửa"
 
-    if (
-        abs(ax - g) < threshold
-        and abs(ay) < 0.4
-        and abs(az) < 0.4
-    ):
+    # 3. NẰM ÚP: Nằm phẳng trên giường, ngực ép xuống mặt phẳng (trục Z âm lớn, thân phẳng ngang ax nhỏ)
+    if az <= -0.65 and abs(ax) < 0.38 and abs(ay) < 0.50:
+        return "nằm úp"
+
+    # 4. NẰM NGHIÊNG TRÁI / PHẢI: Trọng lực dồn sang trục Y
+    if ay <= -0.60 and abs(ax) < 0.50:
+        return "nằm nghiêng trái"
+    if ay >= 0.60 and abs(ax) < 0.50:
+        return "nằm nghiêng phải"
+
+    # 5. ĐỨNG THẲNG: Trọng lực dồn dọc theo thân người (trục X)
+    if ax >= 0.78 and abs(az) < 0.45 and abs(ay) < 0.40:
         return "đứng"
 
+    # 6. NGỒI TỰA LƯNG: Ngồi ngả về phía sau
+    if 0.35 <= ax <= 0.72 and az >= 0.38 and abs(ay) < 0.45:
+        return "ngồi tựa lưng"
+
+    # 7. NGỒI THẲNG:
+    if ax >= 0.52 and abs(az) < 0.50 and abs(ay) < 0.50:
+        return "ngồi"
+
+    # Mặc định suy luận dựa trên trục có giá trị tuyệt đối lớn nhất
+    abs_x, abs_y, abs_z = abs(ax), abs(ay), abs(az)
+    if abs_z > abs_x and abs_z > abs_y:
+        if az < 0:
+            return "nằm úp" if abs(ax) < 0.25 else "úp mặt xuống bàn"
+        return "nằm ngửa"
+    elif abs_y > abs_x and abs_y > abs_z:
+        return "nằm nghiêng phải" if ay > 0 else "nằm nghiêng trái"
+    elif abs_x > abs_y and abs_x > abs_z:
+        return "đứng" if ax > 0.75 else "ngồi"
+
     return "ngồi"
+
+# ==================================================
+# FALL DETECTION (PHÁT HIỆN TÉ NGÃ)
+# ==================================================
+
+
+def check_fall_event(samples, current_posture, current_bpm="—"):
+    """
+    Phát hiện sự cố té ngã dựa trên chuỗi mẫu gần nhất:
+    1. Phát hiện đỉnh gia tốc va đập SVM >= 2.4g
+    2. Đi kèm vận tốc góc gyro lớn hoặc trước đó có giảm gia tốc (free-fall)
+    3. Tư thế sau va chạm là một trong các tư thế nằm hoặc gục xuống bàn
+    """
+    global fall_state
+
+    max_impact = 0.0
+    detected_impact = False
+
+    for s in samples:
+        ax = float(s.get("ax", 0))
+        ay = float(s.get("ay", 0))
+        az = float(s.get("az", 0))
+        gx = float(s.get("gx", 0))
+        gy = float(s.get("gy", 0))
+        gz = float(s.get("gz", 0))
+
+        # Chuẩn hóa về g nếu cần
+        mag = float(np.sqrt(ax**2 + ay**2 + az**2))
+        if 5.0 < mag < 50.0:
+            ax, ay, az = ax / 9.80665, ay / 9.80665, az / 9.80665
+            mag = mag / 9.80665
+        elif mag > 1000.0:
+            ax, ay, az = ax / 16384.0, ay / 16384.0, az / 16384.0
+            mag = mag / 16384.0
+
+        if mag > max_impact:
+            max_impact = mag
+
+        gyro_mag = float(np.sqrt(gx**2 + gy**2 + gz**2))
+
+        # Kiểm tra ngưỡng va đập mạnh
+        if mag >= FALL_IMPACT_THRESHOLD_G or (mag >= 2.0 and gyro_mag >= FALL_GYRO_MAG_THRESHOLD):
+            detected_impact = True
+
+    # Nếu có va đập mạnh và tư thế cơ thể sau đó là nằm hoặc gục
+    lying_postures = ["nằm ngửa", "nằm úp", "nằm nghiêng trái", "nằm nghiêng phải", "úp mặt xuống bàn"]
+    if detected_impact and (current_posture in lying_postures):
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        fall_state["alert"] = True
+        fall_state["time"] = now_str
+        fall_state["impact_g"] = round(max_impact, 2)
+        fall_state["posture_after"] = current_posture
+        fall_state["dismissed"] = False
+
+        print(f"🚨 [CẢNH BÁO TÉ NGÃ] Phát hiện ngã lúc {now_str} | Lực va đập: {max_impact:.2f}g | Tư thế: {current_posture}")
+
+        # Kiểm tra Cooldown để gửi email (chống spam)
+        current_time = time.time()
+        if (current_time - fall_state["last_email_time"]) > FALL_EMAIL_COOLDOWN_SECONDS:
+            fall_state["last_email_time"] = current_time
+            fall_state["email_status"] = "Đang gửi email..."
+
+            def on_email_done(success, message):
+                fall_state["email_status"] = "Đã gửi email thành công" if success else f"Lỗi gửi email: {message}"
+
+            send_fall_alert_email({
+                "time": now_str,
+                "impact_g": max_impact,
+                "posture": current_posture,
+                "bpm": current_bpm
+            }, callback=on_email_done)
+        else:
+            print("[Email Alert] Đang trong thời gian cooldown, tạm hoãn gửi email.")
 
 # ==================================================
 # PREPROCESSING & AI BPM
@@ -276,7 +426,6 @@ def predict_bpm():
 
         signal_ok, signal_status, signal_info = analyze_breath_signal(window)
         if not signal_ok:
-            print("SIGNAL CHECK:", signal_status, signal_info)
             return {
                 "status": signal_status,
                 "bpm": signal_status,
@@ -349,21 +498,44 @@ def predict_bpm():
 
 
 def reset_runtime_state():
-    global latest_data, last_data_at
+    global latest_data, last_data_at, fall_state
 
     buffer.clear()
+    recent_samples_buffer.clear()
     latest_data = DEFAULT_DATA.copy()
     last_data_at = None
+    fall_state = {
+        "alert": False,
+        "time": None,
+        "impact_g": 0.0,
+        "posture_after": None,
+        "email_status": "Chưa có sự cố",
+        "last_email_time": 0.0,
+        "dismissed": False
+    }
 
 
 def get_live_data():
     if last_data_at is None:
-        return latest_data
+        data = latest_data.copy()
+        data["fall_alert"] = fall_state["alert"]
+        data["impact_g"] = fall_state["impact_g"]
+        data["fall_time"] = fall_state["time"]
+        data["email_status"] = fall_state["email_status"]
+        return data
 
     if time.monotonic() - last_data_at > DATA_TIMEOUT_SECONDS:
+        # Giữ lại trạng thái fall alert nếu đang có cảnh báo chưa tắt
+        saved_fall = fall_state.copy()
         reset_runtime_state()
+        fall_state.update(saved_fall)
 
-    return latest_data
+    data = latest_data.copy()
+    data["fall_alert"] = fall_state["alert"]
+    data["impact_g"] = fall_state["impact_g"]
+    data["fall_time"] = fall_state["time"]
+    data["email_status"] = fall_state["email_status"]
+    return data
 
 
 def process_sample(sample):
@@ -430,7 +602,8 @@ def status():
         ),
         "posture": current_data["posture"],
         "bpm": current_data["bpm"],
-        "buffer": len(buffer)
+        "buffer": len(buffer),
+        "fall_alert": fall_state["alert"]
     })
 
 
@@ -450,7 +623,8 @@ def test():
         "buffer_size": len(buffer),
         "window_size": WINDOW_SIZE,
         "features": N_FEATURES,
-        "classes_bpm": classes_bpm
+        "classes_bpm": classes_bpm,
+        "fall_alert": fall_state["alert"]
     })
 
 
@@ -463,6 +637,79 @@ def reset():
         "message": "Runtime state reset",
         "buffer": len(buffer),
         "data": latest_data
+    })
+
+
+@app.route("/dismiss_alert", methods=["POST"])
+def dismiss_alert():
+    """Tắt còi báo động và xoá trạng thái cảnh báo ngã"""
+    global fall_state
+    fall_state["alert"] = False
+    fall_state["dismissed"] = True
+    print("[Alert] Người dùng đã tắt còi báo động té ngã.")
+    return jsonify({
+        "success": True,
+        "message": "Đã tắt cảnh báo té ngã"
+    })
+
+
+@app.route("/test_fall", methods=["POST"])
+def test_fall():
+    """Kích hoạt sự kiện té ngã nhân tạo để test còi và email"""
+    global fall_state
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    current_bpm = latest_data.get("bpm", "16.0")
+
+    fall_state["alert"] = True
+    fall_state["time"] = now_str
+    fall_state["impact_g"] = 3.25
+    fall_state["posture_after"] = "nằm úp"
+    fall_state["dismissed"] = False
+    fall_state["email_status"] = "Đang gửi email..."
+
+    def on_email_done(success, message):
+        fall_state["email_status"] = "Đã gửi email thành công" if success else f"Lỗi gửi email: {message}"
+
+    send_fall_alert_email({
+        "time": now_str,
+        "impact_g": 3.25,
+        "posture": "nằm úp",
+        "bpm": current_bpm
+    }, callback=on_email_done)
+
+    return jsonify({
+        "success": True,
+        "message": "Đã kích hoạt sự kiện té ngã giả lập thành công!"
+    })
+
+
+@app.route("/api/email_config", methods=["GET", "POST"])
+def email_config():
+    if request.method == "POST":
+        data = request.get_json(force=True)
+        ok, msg = save_env_vars(data)
+        return jsonify({"success": ok, "message": msg})
+    else:
+        cfg = load_env_vars()
+        # Ẩn bớt mật khẩu ứng dụng để bảo mật
+        pwd = cfg.get("EMAIL_PASSWORD", "")
+        masked_pwd = (pwd[:4] + "*" * (len(pwd) - 4)) if len(pwd) > 4 else ("*" * len(pwd))
+        return jsonify({
+            "EMAIL_SENDER": cfg.get("EMAIL_SENDER", ""),
+            "EMAIL_PASSWORD": masked_pwd,
+            "ALERT_RECEIVER_EMAIL": cfg.get("ALERT_RECEIVER_EMAIL", ""),
+            "ENABLE_EMAIL_ALERT": cfg.get("ENABLE_EMAIL_ALERT", "true")
+        })
+
+
+@app.route("/api/test_email", methods=["POST"])
+def test_email_api():
+    def on_test_done(success, msg):
+        pass
+    send_test_email(callback=on_test_done)
+    return jsonify({
+        "success": True,
+        "message": "Đang gửi email thử nghiệm. Vui lòng kiểm tra hộp thư đến!"
     })
 
 
@@ -481,6 +728,9 @@ def posture():
         ax, ay, az, gx, gy, gz = last_values
         posture_result = detect_posture(ax, ay, az)
         bpm_result = predict_bpm()
+
+        # Kiểm tra sự kiện té ngã trên mảng mẫu nhận được
+        check_fall_event(samples, posture_result, bpm_result.get("bpm", "—"))
 
         latest_data = {
             "posture": posture_result,
@@ -501,18 +751,14 @@ def posture():
             "fft_confidence": bpm_result.get("fft_confidence"),
             "spectral_power": bpm_result.get("spectral_power"),
             "signal_status": bpm_result.get("status", "-"),
-            "buffer_size": len(buffer)
+            "buffer_size": len(buffer),
+            "fall_alert": fall_state["alert"],
+            "impact_g": fall_state["impact_g"],
+            "fall_time": fall_state["time"],
+            "posture_detail": posture_result,
+            "email_status": fall_state["email_status"]
         }
         last_data_at = time.monotonic()
-
-        print({
-            "posture": posture_result,
-            "bpm": bpm_result.get("bpm"),
-            "method": bpm_result.get("method"),
-            "confidence": bpm_result.get("confidence"),
-            "received": len(samples),
-            "buffer": len(buffer)
-        })
 
         return jsonify({
             "success": True,
@@ -524,7 +770,9 @@ def posture():
             "confidence": bpm_result.get("confidence"),
             "probabilities": bpm_result.get("probabilities", []),
             "buffer": len(buffer),
-            "received": len(samples)
+            "received": len(samples),
+            "fall_alert": fall_state["alert"],
+            "impact_g": fall_state["impact_g"]
         })
 
     except Exception as e:

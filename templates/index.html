@@ -5,8 +5,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description"
-        content="Real-time AI breathing rate and posture monitoring dashboard powered by TFLite classification model." />
-    <title>Breath AI Cloud — Real-time Monitor</title>
+        content="Real-time AI breathing rate, posture detection, and fall alert dashboard powered by TFLite classification." />
+    <title>Breath AI Cloud — Real-time ESP32 Monitor</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -18,8 +18,8 @@
         :root {
             --bg-primary: #060c18;
             --bg-secondary: #0d1526;
-            --glass-bg: rgba(15, 25, 50, 0.65);
-            --glass-border: rgba(255, 255, 255, 0.07);
+            --glass-bg: rgba(15, 25, 50, 0.75);
+            --glass-border: rgba(255, 255, 255, 0.08);
             --glass-highlight: rgba(255, 255, 255, 0.03);
             --text-primary: #f0f4ff;
             --text-secondary: #7a8fb5;
@@ -32,7 +32,10 @@
             --blue-glow: rgba(79, 143, 255, 0.3);
             --purple: #a78bfa;
             --yellow: #fbbf24;
-            --red: #f87171;
+            --orange: #f97316;
+            --red: #ef4444;
+            --red-dim: rgba(239, 68, 68, 0.18);
+            --red-glow: rgba(239, 68, 68, 0.45);
             --radius-lg: 20px;
             --radius-md: 14px;
             --radius-sm: 10px;
@@ -59,9 +62,8 @@
             padding: 20px;
         }
 
-        /* ─── LAYOUT ─────────────────────────────────── */
         .app {
-            max-width: 1080px;
+            max-width: 1120px;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
@@ -75,7 +77,7 @@
             justify-content: space-between;
             flex-wrap: wrap;
             gap: 12px;
-            padding: 24px 28px;
+            padding: 22px 28px;
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
             border-radius: var(--radius-lg);
@@ -144,6 +146,12 @@
             border: 1px solid transparent;
         }
 
+        .badge-live {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ff6b6b;
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
         .badge-green {
             background: var(--green-dim);
             color: var(--green);
@@ -156,12 +164,6 @@
             border-color: rgba(79, 143, 255, 0.25);
         }
 
-        .badge-gray {
-            background: rgba(100, 120, 160, 0.1);
-            color: var(--text-secondary);
-            border-color: var(--glass-border);
-        }
-
         .dot {
             width: 6px;
             height: 6px;
@@ -170,23 +172,156 @@
         }
 
         .dot-pulse {
-            background: var(--green);
-            animation: dot-pulse 1.6s ease infinite;
-            box-shadow: 0 0 0 0 var(--green-glow);
+            background: #ef4444;
+            animation: dot-pulse 1.4s ease infinite;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
         }
 
         @keyframes dot-pulse {
-            0% {
-                box-shadow: 0 0 0 0 var(--green-glow);
-            }
+            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+            70% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
 
-            70% {
-                box-shadow: 0 0 0 7px rgba(16, 230, 138, 0);
-            }
+        /* ─── EMERGENCY FALL BANNER ──────────────────── */
+        .fall-alert-banner {
+            display: none;
+            position: relative;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.35));
+            border: 2px solid var(--red);
+            border-radius: var(--radius-lg);
+            padding: 22px 26px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 0 45px var(--red-glow);
+            animation: alert-flash 1.2s ease-in-out infinite alternate;
+        }
 
-            100% {
-                box-shadow: 0 0 0 0 rgba(16, 230, 138, 0);
-            }
+        @keyframes alert-flash {
+            0% { border-color: rgba(239, 68, 68, 0.7); box-shadow: 0 0 25px rgba(239, 68, 68, 0.3); }
+            100% { border-color: #ff4d4d; box-shadow: 0 0 55px rgba(239, 68, 68, 0.7); }
+        }
+
+        .fall-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .fall-info {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .fall-siren-icon {
+            font-size: 2.4rem;
+            animation: siren-wobble 0.8s ease infinite alternate;
+        }
+
+        @keyframes siren-wobble {
+            0% { transform: scale(1) rotate(-8deg); }
+            100% { transform: scale(1.15) rotate(8deg); }
+        }
+
+        .fall-text h2 {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: #ff6b6b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .fall-text p {
+            font-size: 0.82rem;
+            color: #fecaca;
+            margin-top: 4px;
+        }
+
+        .fall-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn-dismiss {
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 99px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-dismiss:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.6);
+        }
+
+        /* ─── QUICK ACTIONS ROW ──────────────────────── */
+        .actions-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            padding: 14px 20px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+        }
+
+        .actions-left, .actions-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--glass-border);
+            color: var(--text-primary);
+            padding: 9px 18px;
+            border-radius: var(--radius-sm);
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: var(--transition);
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .action-btn.active {
+            background: var(--green-dim);
+            color: var(--green);
+            border-color: rgba(16, 230, 138, 0.4);
+        }
+
+        .action-btn.danger {
+            background: var(--red-dim);
+            color: #fca5a5;
+            border-color: rgba(239, 68, 68, 0.35);
+        }
+
+        .action-btn.danger:hover {
+            background: rgba(239, 68, 68, 0.3);
+            border-color: var(--red);
         }
 
         /* ─── HERO METRICS ───────────────────────────── */
@@ -198,7 +333,7 @@
 
         .metric-card {
             position: relative;
-            padding: 28px 24px;
+            padding: 26px 24px;
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
             border-radius: var(--radius-lg);
@@ -222,22 +357,22 @@
 
         .metric-card.bpm-card:hover {
             border-color: rgba(16, 230, 138, 0.4);
-            box-shadow: 0 0 40px var(--green-dim);
+            box-shadow: 0 0 35px var(--green-dim);
         }
 
         .metric-card.posture-card {
-            border-color: rgba(79, 143, 255, 0.2);
+            border-color: rgba(79, 143, 255, 0.25);
         }
 
         .metric-card.posture-card:hover {
-            border-color: rgba(79, 143, 255, 0.4);
-            box-shadow: 0 0 40px var(--blue-dim);
+            border-color: rgba(79, 143, 255, 0.45);
+            box-shadow: 0 0 35px var(--blue-dim);
         }
 
         .metric-glow {
             position: absolute;
-            width: 180px;
-            height: 180px;
+            width: 170px;
+            height: 170px;
             border-radius: 50%;
             filter: blur(55px);
             opacity: 0.25;
@@ -246,13 +381,8 @@
             bottom: -40px;
         }
 
-        .bpm-card .metric-glow {
-            background: var(--green);
-        }
-
-        .posture-card .metric-glow {
-            background: var(--blue);
-        }
+        .bpm-card .metric-glow { background: var(--green); }
+        .posture-card .metric-glow { background: var(--blue); }
 
         .metric-label {
             font-size: 0.7rem;
@@ -263,11 +393,11 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            margin-bottom: 14px;
+            margin-bottom: 12px;
         }
 
         .metric-value {
-            font-size: 3.5rem;
+            font-size: 3.2rem;
             font-weight: 800;
             letter-spacing: -0.04em;
             line-height: 1;
@@ -280,23 +410,57 @@
         }
 
         .posture-card .metric-value {
+            font-size: 2.2rem;
             color: var(--blue);
             text-shadow: 0 0 30px var(--blue-glow);
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
         .metric-sub {
-            margin-top: 10px;
-            font-size: 0.72rem;
+            margin-top: 14px;
+            font-size: 0.74rem;
             color: var(--text-secondary);
             display: flex;
-            gap: 12px;
+            gap: 14px;
             flex-wrap: wrap;
         }
 
         .metric-sub span {
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: 5px;
+        }
+
+        /* ─── SYSTEM DETAILS GRID ────────────────────── */
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .detail-box {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+        }
+
+        .detail-box .title {
+            font-size: 0.68rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .detail-box .val {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-top: 4px;
         }
 
         /* ─── CHARTS ROW ─────────────────────────────── */
@@ -338,33 +502,122 @@
             height: 160px;
         }
 
+        /* ─── MODAL EMAIL CẤU HÌNH GỌN GÀNG ───────────── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-box {
+            background: #0f172a;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: var(--radius-lg);
+            max-width: 500px;
+            width: 100%;
+            padding: 26px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .modal-header h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            font-weight: 600;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 11px 14px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: white;
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--blue);
+        }
+
+        .form-help {
+            font-size: 0.72rem;
+            color: #64748b;
+            margin-top: 5px;
+            line-height: 1.4;
+        }
+
+        .advanced-toggle {
+            font-size: 0.74rem;
+            color: var(--blue);
+            cursor: pointer;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .advanced-fields {
+            display: none;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed #334155;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
         /* ─── FOOTER ─────────────────────────────────── */
         .footer {
             text-align: center;
-            font-size: 0.7rem;
+            font-size: 0.72rem;
             color: var(--text-muted);
-            padding: 4px 0 8px;
+            padding: 8px 0;
         }
 
         /* ─── RESPONSIVE ─────────────────────────────── */
-        @media (max-width: 720px) {
-            .hero {
-                grid-template-columns: 1fr;
-            }
-
-            .charts-row {
-                grid-template-columns: 1fr;
-            }
-
-            .metric-value {
-                font-size: 2.8rem;
-            }
-        }
-
-        @media (max-width: 440px) {
-            body {
-                padding: 12px;
-            }
+        @media (max-width: 768px) {
+            .hero, .charts-row { grid-template-columns: 1fr; }
+            .details-grid { grid-template-columns: 1fr 1fr; }
+            .metric-value { font-size: 2.8rem; }
+            .posture-card .metric-value { font-size: 1.8rem; }
         }
     </style>
 </head>
@@ -377,76 +630,146 @@
         <header class="header">
             <div class="header-brand">
                 <div class="logo-ring">
-                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path
-                            d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 3c.8 0 1.5.6 1.9 1.4l1.6 4C16 11 16 11.5 16 12c0 2.2-1.8 4-4 4s-4-1.8-4-4c0-.5 0-1 .5-1.6l1.6-4C10.5 5.6 11.2 5 12 5z" />
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                     </svg>
                 </div>
                 <div class="brand-text">
-                    <h1>Breath AI Cloud</h1>
-                    <p>Real-time Posture &amp; Breathing Monitor</p>
+                    <h1>BREATH AI CLOUD</h1>
+                    <p>Giám Sát Hô Hấp &amp; Nhận Diện Tư Thế ESP32 • Cảnh Báo Té Ngã Tự Động</p>
                 </div>
             </div>
+
             <div class="header-status">
-                <div class="badge badge-green" id="badge-model">
+                <span class="badge badge-live">
                     <span class="dot dot-pulse"></span>
-                    <span id="badge-model-text">LOADING...</span>
-                </div>
-                <div class="badge badge-blue" id="badge-buffer">
-                    <span>BUF <span id="hdr-buffer">0</span>/500</span>
-                </div>
-                <div class="badge badge-gray" id="badge-time">
-                    <span id="hdr-time">—</span>
-                </div>
+                    <span>ESP32 LIVE SENSOR</span>
+                </span>
+                <span class="badge badge-green" id="badge-model">
+                    <span id="badge-model-text">AI MODEL OK</span>
+                </span>
+                <span class="badge badge-blue">
+                    BUF: <b id="hdr-buffer">0</b>/500
+                </span>
+                <span class="badge" id="badge-audio-status" style="background:rgba(255,255,255,0.06);color:#94a3b8;">
+                    🔊 Âm thanh: BẬT
+                </span>
+                <span class="badge" style="background:rgba(255,255,255,0.06);color:#94a3b8;" id="hdr-time">—</span>
             </div>
         </header>
 
+        <!-- ── BANNER CẢNH BÁO TÉ NGÃ KHẨN CẤP ─── -->
+        <div class="fall-alert-banner" id="fall-banner">
+            <div class="fall-content">
+                <div class="fall-info">
+                    <div class="fall-siren-icon">🚨</div>
+                    <div class="fall-text">
+                        <h2>PHÁT HIỆN SỰ CỐ TÉ NGÃ KHẨN CẤP!</h2>
+                        <p>
+                            Thời gian: <b id="fall-alert-time">—</b> | 
+                            Va đập: <b id="fall-alert-impact" style="color:#ff6b6b;">—</b> | 
+                            Tư thế: <b id="fall-alert-posture" style="color:#fbbf24;">—</b> | 
+                            Email: <span id="fall-alert-email-status">Đang gửi...</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="fall-actions">
+                    <button class="btn-dismiss" onclick="dismissFallAlert()">
+                        <span>✓</span> ĐÃ KIỂM TRA / TẮT CÒI BÁO ĐỘNG
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── ACTIONS BAR THỰC TẾ (KHÔNG CÓ GIẢ LẬP) ─── -->
+        <div class="actions-bar">
+            <div class="actions-left">
+                <button class="action-btn" id="btn-sound-toggle" onclick="toggleAudio()">
+                    <span id="sound-icon">🔊</span> <span id="sound-text">Tắt Âm Thanh</span>
+                </button>
+                <button class="action-btn" onclick="openEmailModal()">
+                    <span>📧</span> Cài Đặt Email Người Nhận Cảnh Báo
+                </button>
+                <button class="action-btn danger" onclick="triggerTestFall()">
+                    <span>🚨</span> Thử Nghiệm Báo Động Té Ngã
+                </button>
+            </div>
+            <div class="actions-right">
+                <span style="font-size:0.75rem; color:#94a3b8;">
+                    Nguồn dữ liệu: <b style="color:#10e68a;">Cảm biến MPU6050 trên chip ESP32</b>
+                </span>
+            </div>
+        </div>
+
         <!-- ── HERO METRICS ────────────────────── -->
-        <section class="hero">
+        <div class="hero">
+            <!-- Nhịp thở BPM -->
             <div class="metric-card bpm-card">
                 <div class="metric-glow"></div>
                 <div class="metric-label">
-                    <span class="dot dot-pulse"></span>
-                    Nhịp Thở AI (BPM)
+                    <span>🫁</span> Nhịp Thở Thực Tế (BPM)
                 </div>
                 <div class="metric-value" id="bpm-value">—</div>
                 <div class="metric-sub">
-                    <span>🎯 Argmax: <strong id="argmax-bpm">—</strong></span>
-                    <span>⚡ FFT: <strong id="fft-bpm">—</strong></span>
-                    <span>📊 Confidence: <strong id="confidence">—</strong></span>
-                    <span>🔍 Method: <strong id="method">—</strong></span>
+                    <span>Phương pháp: <b id="method" style="color:var(--text-primary)">—</b></span>
+                    <span>Argmax: <b id="argmax-bpm" style="color:var(--text-primary)">—</b></span>
+                    <span>Độ tin cậy: <b id="confidence" style="color:var(--text-primary)">—</b></span>
                 </div>
             </div>
 
+            <!-- Tư thế Posture từ Chip -->
             <div class="metric-card posture-card">
                 <div class="metric-glow"></div>
                 <div class="metric-label">
-                    <span class="dot" style="background:var(--blue);"></span>
-                    Tư Thế Cơ Thể
+                    <span>🧍‍♂️</span> Tư Thế Đo Từ Chip (Posture)
                 </div>
-                <div class="metric-value" id="posture-value">—</div>
+                <div class="metric-value" id="posture-value">
+                    <span id="posture-icon">⏳</span>
+                    <span id="posture-text">CHỜ CHIP GỬI DỮ LIỆU</span>
+                </div>
                 <div class="metric-sub">
-                    <span>📡 Signal: <strong id="signal-status">WAITING</strong></span>
-                    <span>🗄️ Buffer: <strong><span id="buf-count">0</span>/500</strong></span>
+                    <span>Trạng thái tín hiệu: <b id="signal-status" style="color:var(--text-primary)">—</b></span>
+                    <span>Bộ đệm AI: <b id="buf-count" style="color:var(--text-primary)">0</b>/500 mẫu</span>
                 </div>
             </div>
-        </section>
+        </div>
 
-        <!-- ── CHARTS ───────────────────────────── -->
+        <!-- ── CHI TIẾT CẢM BIẾN & TÉ NGÃ ──────── -->
+        <div class="details-grid">
+            <div class="detail-box">
+                <div class="title">Gia Tốc Chip (ax, ay, az g)</div>
+                <div class="val" id="acc-values" style="font-size:0.92rem; font-family:monospace;">0.00 / 0.00 / 0.00</div>
+            </div>
+            <div class="detail-box">
+                <div class="title">Góc Quay Gyro (rad/s)</div>
+                <div class="val" id="gyro-values" style="font-size:0.92rem; font-family:monospace;">0.00 / 0.00 / 0.00</div>
+            </div>
+            <div class="detail-box">
+                <div class="title">Ước Lượng Phổ FFT</div>
+                <div class="val" id="fft-bpm" style="color:var(--yellow);">—</div>
+            </div>
+            <div class="detail-box">
+                <div class="title">Email Người Nhận Báo Động</div>
+                <div class="val" id="email-receiver-val" style="font-size:0.85rem; color:#93c5fd; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Chưa cấu hình</div>
+            </div>
+        </div>
+
+        <!-- ── BIỂU ĐỒ THỜI GIAN THỰC ───────────── -->
         <div class="charts-row">
             <div class="chart-card">
                 <div class="chart-title">
                     <span class="chart-title-dot" style="background:var(--green);"></span>
-                    Sóng Tín Hiệu Thở (acc_mag)
+                    Sóng Tín Hiệu Thở Đo Từ Cảm Biến (Trục Z)
                 </div>
                 <div class="chart-wrap">
                     <canvas id="wave-chart"></canvas>
                 </div>
             </div>
+
             <div class="chart-card">
                 <div class="chart-title">
                     <span class="chart-title-dot" style="background:var(--purple);"></span>
-                    Phân Phối AI — 9 Lớp BPM
+                    Phân Phối AI — 9 Lớp BPM (12 - 20 BPM)
                 </div>
                 <div class="chart-wrap">
                     <canvas id="prob-chart"></canvas>
@@ -454,11 +777,145 @@
             </div>
         </div>
 
-        <div class="footer" id="footer-status">Kết nối tới máy chủ...</div>
+        <div class="footer" id="footer-status">Hệ thống sẵn sàng nhận dữ liệu từ ESP32...</div>
 
     </div><!-- /.app -->
 
+    <!-- ── MODAL CẤU HÌNH EMAIL NGƯỜI NHẬN GỌN GÀNG ─── -->
+    <div class="modal-overlay" id="email-modal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>📧 Cài Đặt Email Nhận Cảnh Báo Té Ngã</h3>
+                <button class="modal-close" onclick="closeEmailModal()">×</button>
+            </div>
+
+            <div class="form-group">
+                <label>Email Người Nhận Cảnh Báo (Khẩn Cấp)</label>
+                <input type="email" id="cfg-receiver" class="form-input" placeholder="nhap_email_cua_ban@gmail.com" />
+                <div class="form-help">
+                    Khi con chip phát hiện va đập té ngã, hệ thống sẽ lập tức gửi email thông báo chi tiết đến hòm thư này.
+                </div>
+            </div>
+
+            <span class="advanced-toggle" onclick="toggleAdvancedEmail()">
+                ⚙️ Cấu hình tài khoản gửi (Google App Password) ▼
+            </span>
+
+            <div class="advanced-fields" id="advanced-fields">
+                <div class="form-group">
+                    <label>Gmail Người Gửi (EMAIL_SENDER)</label>
+                    <input type="email" id="cfg-sender" class="form-input" placeholder="gmail_gui_di@gmail.com" />
+                </div>
+                <div class="form-group">
+                    <label>Mật Khẩu Ứng Dụng Google (16 Chữ Cái)</label>
+                    <input type="password" id="cfg-password" class="form-input" placeholder="16 chữ cái từ Google App Passwords" />
+                    <div class="form-help">
+                        Lấy tại: <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#60a5fa;">myaccount.google.com/apppasswords</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="action-btn" onclick="testEmailConnection()">✉️ Gửi Thử Email Tới Người Nhận</button>
+                <button class="action-btn active" onclick="saveEmailConfig()">💾 Lưu Cài Đặt</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        /* ────────────────────────────────────────────────────
+           AUDIO ALARM SYNTHESIZER (WEB AUDIO API)
+        ──────────────────────────────────────────────────── */
+        let audioCtx = null;
+        let isAudioEnabled = true;
+        let isAlarmPlaying = false;
+        let sirenOsc = null;
+        let sirenGain = null;
+        let sirenInterval = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSiren() {
+            if (!isAudioEnabled || isAlarmPlaying) return;
+            initAudio();
+
+            try {
+                isAlarmPlaying = true;
+                sirenGain = audioCtx.createGain();
+                sirenGain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                sirenGain.connect(audioCtx.destination);
+
+                sirenOsc = audioCtx.createOscillator();
+                sirenOsc.type = 'sawtooth';
+                sirenOsc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                sirenOsc.connect(sirenGain);
+                sirenOsc.start();
+
+                let high = true;
+                sirenInterval = setInterval(() => {
+                    if (!isAlarmPlaying || !sirenOsc) return;
+                    const freq = high ? 660 : 960;
+                    sirenOsc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                    high = !high;
+                }, 350);
+            } catch (e) {
+                console.error("Audio error:", e);
+            }
+        }
+
+        function stopSiren() {
+            isAlarmPlaying = false;
+            if (sirenInterval) {
+                clearInterval(sirenInterval);
+                sirenInterval = null;
+            }
+            if (sirenOsc) {
+                try {
+                    sirenOsc.stop();
+                    sirenOsc.disconnect();
+                } catch (e) {}
+                sirenOsc = null;
+            }
+            if (sirenGain) {
+                try { sirenGain.disconnect(); } catch (e) {}
+                sirenGain = null;
+            }
+        }
+
+        function toggleAudio() {
+            initAudio();
+            isAudioEnabled = !isAudioEnabled;
+            const btn = document.getElementById('btn-sound-toggle');
+            const icon = document.getElementById('sound-icon');
+            const text = document.getElementById('sound-text');
+            const statusBadge = document.getElementById('badge-audio-status');
+
+            if (isAudioEnabled) {
+                icon.textContent = '🔊';
+                text.textContent = 'Tắt Âm Thanh';
+                btn.classList.add('active');
+                statusBadge.textContent = '🔊 Âm thanh: BẬT';
+                statusBadge.style.color = 'var(--green)';
+            } else {
+                stopSiren();
+                icon.textContent = '🔇';
+                text.textContent = 'Bật Âm Thanh';
+                btn.classList.remove('active');
+                statusBadge.textContent = '🔇 Âm thanh: TẮT';
+                statusBadge.style.color = '#f87171';
+            }
+        }
+
+        window.addEventListener('click', () => { if (!audioCtx) initAudio(); }, { once: true });
+
         /* ────────────────────────────────────────────────────
            CHART.JS SETUP
         ──────────────────────────────────────────────────── */
@@ -470,7 +927,6 @@
         const WAVE_LEN = 100;
         const waveData = Array(WAVE_LEN).fill(null);
 
-        /* Wave Chart */
         const waveCtx = document.getElementById('wave-chart').getContext('2d');
         const waveGrad = waveCtx.createLinearGradient(0, 0, 0, 160);
         waveGrad.addColorStop(0, 'rgba(16, 230, 138, 0.35)');
@@ -506,11 +962,8 @@
             }
         });
 
-        /* Probability Chart */
         const probCtx = document.getElementById('prob-chart').getContext('2d');
-        const probColors = BPM_CLASSES.map((_, i) =>
-            `hsl(${160 + i * 18}, 80%, 60%)`
-        );
+        const probColors = BPM_CLASSES.map((_, i) => `hsl(${160 + i * 18}, 80%, 60%)`);
 
         const probChart = new Chart(probCtx, {
             type: 'bar',
@@ -542,72 +995,92 @@
         });
 
         /* ────────────────────────────────────────────────────
-           STATUS CHECK (model info once on load)
+           POSTURE ICONS & STYLING MAP
         ──────────────────────────────────────────────────── */
-        async function fetchStatus() {
-            try {
-                const r = await fetch('/status');
-                const d = await r.json();
-                const modelOk = d.model === true;
-                const badgeEl = document.getElementById('badge-model');
-                const badgeTxt = document.getElementById('badge-model-text');
-                if (modelOk) {
-                    badgeEl.className = 'badge badge-green';
-                    badgeTxt.textContent = 'AI MODEL OK';
-                } else {
-                    badgeEl.className = 'badge';
-                    badgeEl.style.background = 'rgba(248,113,113,0.12)';
-                    badgeEl.style.color = '#f87171';
-                    badgeEl.style.borderColor = 'rgba(248,113,113,0.3)';
-                    badgeTxt.textContent = 'MODEL FAILED';
-                }
-            } catch (e) { /* silent */ }
+        function getPostureInfo(p) {
+            const raw = (p || '').toLowerCase();
+            if (raw.includes('úp mặt xuống bàn')) {
+                return { icon: '💻', text: 'Úp Mặt Xuống Bàn', color: '#f97316' };
+            } else if (raw.includes('nằm ngửa')) {
+                return { icon: '🛏️', text: 'Nằm Ngửa', color: '#38bdf8' };
+            } else if (raw.includes('nằm úp')) {
+                return { icon: '🛌', text: 'Nằm Úp (Sấp)', color: '#a78bfa' };
+            } else if (raw.includes('nằm nghiêng trái')) {
+                return { icon: '↩️', text: 'Nằm Nghiêng Trái', color: '#818cf8' };
+            } else if (raw.includes('nằm nghiêng phải')) {
+                return { icon: '↪️', text: 'Nằm Nghiêng Phải', color: '#818cf8' };
+            } else if (raw.includes('nằm nghiêng')) {
+                return { icon: '🔄', text: 'Nằm Nghiêng', color: '#818cf8' };
+            } else if (raw.includes('ngồi tựa lưng')) {
+                return { icon: '🛋️', text: 'Ngồi Tựa Lưng', color: '#34d399' };
+            } else if (raw.includes('đứng')) {
+                return { icon: '🧍', text: 'Đứng Thẳng', color: '#10e68a' };
+            } else if (raw.includes('ngồi')) {
+                return { icon: '🪑', text: 'Ngồi Thẳng', color: '#2dd4bf' };
+            }
+            return { icon: '⏳', text: 'CHỜ KẾT NỐI TỪ CHIP ESP32', color: '#7a8fb5' };
         }
 
         /* ────────────────────────────────────────────────────
-           MAIN POLLING LOOP
+           MAIN POLLING LOOP (ĐỌC TRỰC TIẾP TỪ CHIP)
         ──────────────────────────────────────────────────── */
         let lastAz = 0;
-
-        function fmt(v, dec = 3) {
-            if (v === null || v === undefined) return '—';
-            if (typeof v === 'number') return v.toFixed(dec);
-            return String(v);
-        }
 
         async function updateData() {
             try {
                 const r = await fetch('/current');
                 const d = await r.json();
 
-                /* ── BPM & posture ── */
+                // 1. Cập nhật BPM
                 document.getElementById('bpm-value').textContent = d.bpm ?? '—';
-                document.getElementById('posture-value').textContent = d.posture ?? '—';
                 document.getElementById('argmax-bpm').textContent = d.argmax_bpm != null ? d.argmax_bpm + ' bpm' : '—';
-                document.getElementById('fft-bpm').textContent = d.fft_bpm != null ? d.fft_bpm + ' bpm' : '—';
                 document.getElementById('confidence').textContent = d.confidence != null ? (d.confidence * 100).toFixed(1) + '%' : '—';
                 document.getElementById('method').textContent = d.method ?? '—';
                 document.getElementById('signal-status').textContent = d.signal_status ?? '—';
 
-                /* ── buffer ── */
+                // 2. Cập nhật Tư thế chi tiết từ Chip
+                const pInfo = getPostureInfo(d.posture);
+                document.getElementById('posture-icon').textContent = pInfo.icon;
+                document.getElementById('posture-text').textContent = pInfo.text;
+                document.getElementById('posture-text').style.color = pInfo.color;
+
+                // 3. Cập nhật Trục cảm biến & FFT
+                document.getElementById('acc-values').textContent = 
+                    `${fmt(d.ax, 2)} / ${fmt(d.ay, 2)} / ${fmt(d.az, 2)}`;
+                document.getElementById('gyro-values').textContent = 
+                    `${fmt(d.gx, 2)} / ${fmt(d.gy, 2)} / ${fmt(d.gz, 2)}`;
+                document.getElementById('fft-bpm').textContent = d.fft_bpm != null ? d.fft_bpm + ' bpm' : '—';
+
+                // 4. Header & Buffer
                 const buf = d.buffer_size ?? 0;
                 document.getElementById('buf-count').textContent = buf;
                 document.getElementById('hdr-buffer').textContent = buf;
-
-                /* ── header time ── */
                 document.getElementById('hdr-time').textContent = d.time ?? '—';
-
-                /* ── footer ── */
                 document.getElementById('footer-status').textContent =
-                    `Breath AI Cloud • ${d.time ?? '—'} • Buf ${buf}/500`;
+                    `Breath AI Cloud • Dữ liệu nhận từ chip: ${d.time ?? 'Chưa có'} • Bộ đệm: ${buf}/500 mẫu`;
 
-                /* ── probability bar chart ── */
+                // 5. CẢNH BÁO TÉ NGÃ (FALL ALERT & SIREN)
+                const banner = document.getElementById('fall-banner');
+                if (d.fall_alert === true) {
+                    banner.style.display = 'block';
+                    document.getElementById('fall-alert-time').textContent = d.fall_time || 'Vừa xong';
+                    document.getElementById('fall-alert-impact').textContent = (d.impact_g || '2.5') + ' G';
+                    document.getElementById('fall-alert-posture').textContent = (d.posture || '').toUpperCase();
+                    document.getElementById('fall-alert-email-status').textContent = d.email_status || 'Đang gửi...';
+
+                    playSiren();
+                } else {
+                    banner.style.display = 'none';
+                    stopSiren();
+                }
+
+                // 6. Cập nhật Biểu đồ Xác suất 9 lớp
                 if (Array.isArray(d.probabilities) && d.probabilities.length === 9) {
                     probChart.data.datasets[0].data = d.probabilities;
                     probChart.update();
                 }
 
-                /* ── wave chart — use az as breathing proxy ── */
+                // 7. Cập nhật Biểu đồ Sóng thở
                 const azVal = typeof d.az === 'number' ? d.az : lastAz;
                 lastAz = azVal;
                 waveData.push(azVal);
@@ -616,13 +1089,133 @@
                 waveChart.update();
 
             } catch (e) {
-                document.getElementById('footer-status').textContent = '⚠ Không thể kết nối tới server — ' + new Date().toLocaleTimeString();
+                document.getElementById('footer-status').textContent = 
+                    '⚠ Không thể kết nối tới server — ' + new Date().toLocaleTimeString();
             }
         }
 
-        fetchStatus();
+        function fmt(v, dec = 2) {
+            if (v === null || v === undefined) return '0.00';
+            if (typeof v === 'number') return (v >= 0 ? '+' : '') + v.toFixed(dec);
+            return String(v);
+        }
+
+        async function fetchInitialConfig() {
+            try {
+                const r = await fetch('/api/email_config');
+                const d = await r.json();
+                const receiver = d.ALERT_RECEIVER_EMAIL || '';
+                document.getElementById('email-receiver-val').textContent = receiver || 'Chưa cấu hình';
+            } catch (e) {}
+        }
+
+        fetchInitialConfig();
         updateData();
         setInterval(updateData, 1000);
+
+        /* ────────────────────────────────────────────────────
+           DISMISS FALL ALERT
+        ──────────────────────────────────────────────────── */
+        async function dismissFallAlert() {
+            stopSiren();
+            try {
+                await fetch('/dismiss_alert', { method: 'POST' });
+                document.getElementById('fall-banner').style.display = 'none';
+            } catch (e) {
+                console.error('Lỗi tắt cảnh báo:', e);
+            }
+        }
+
+        /* ────────────────────────────────────────────────────
+           TRIGGER TEST FALL EVENT
+        ──────────────────────────────────────────────────── */
+        async function triggerTestFall() {
+            initAudio();
+            try {
+                const res = await fetch('/test_fall', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message || 'Đã kích hoạt sự kiện té ngã!');
+                updateData();
+            } catch (e) {
+                alert('Lỗi kích hoạt test ngã: ' + e);
+            }
+        }
+
+        /* ────────────────────────────────────────────────────
+           EMAIL CONFIG MODAL (ĐƠN GIẢN HÓA CHO NGƯỜI NHẬN)
+        ──────────────────────────────────────────────────── */
+        async function openEmailModal() {
+            document.getElementById('email-modal').style.display = 'flex';
+            try {
+                const r = await fetch('/api/email_config');
+                const d = await r.json();
+                document.getElementById('cfg-receiver').value = d.ALERT_RECEIVER_EMAIL || '';
+                document.getElementById('cfg-sender').value = d.EMAIL_SENDER || '';
+                document.getElementById('cfg-password').value = d.EMAIL_PASSWORD || '';
+            } catch (e) {}
+        }
+
+        function closeEmailModal() {
+            document.getElementById('email-modal').style.display = 'none';
+        }
+
+        function toggleAdvancedEmail() {
+            const el = document.getElementById('advanced-fields');
+            el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+        }
+
+        async function saveEmailConfig() {
+            const receiver = document.getElementById('cfg-receiver').value.trim();
+            const sender = document.getElementById('cfg-sender').value.trim();
+            const password = document.getElementById('cfg-password').value.trim();
+
+            if (!receiver) {
+                alert('Vui lòng nhập Email người nhận cảnh báo!');
+                return;
+            }
+
+            try {
+                const payload = {
+                    ALERT_RECEIVER_EMAIL: receiver,
+                    ENABLE_EMAIL_ALERT: 'true'
+                };
+                if (sender) payload.EMAIL_SENDER = sender;
+                if (password && !password.includes('*')) payload.EMAIL_PASSWORD = password;
+
+                const r = await fetch('/api/email_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const d = await r.json();
+                alert(d.message || 'Lưu cài đặt email người nhận thành công!');
+                document.getElementById('email-receiver-val').textContent = receiver;
+                closeEmailModal();
+            } catch (e) {
+                alert('Lỗi lưu cấu hình: ' + e);
+            }
+        }
+
+        async function testEmailConnection() {
+            const receiver = document.getElementById('cfg-receiver').value.trim();
+            if (!receiver) {
+                alert('Vui lòng nhập email người nhận trước khi gửi thử!');
+                return;
+            }
+            try {
+                // Tự động lưu trước khi gửi test
+                await fetch('/api/email_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ALERT_RECEIVER_EMAIL: receiver })
+                });
+                const r = await fetch('/api/test_email', { method: 'POST' });
+                const d = await r.json();
+                alert(d.message || `Đang gửi email thử nghiệm tới ${receiver}. Vui lòng kiểm tra hộp thư!`);
+            } catch (e) {
+                alert('Lỗi gửi email test: ' + e);
+            }
+        }
     </script>
 </body>
 
