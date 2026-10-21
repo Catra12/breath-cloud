@@ -189,10 +189,10 @@ def detect_posture(ax, ay, az):
         ax, ay, az = ax / 16384.0, ay / 16384.0, az / 16384.0
 
     # 1. NẰM ÚP MẶT XUỐNG BÀN (Gục đầu / ngực úp xuống mặt bàn làm việc)
-    if az <= -0.35 and 0.15 <= ax <= 0.70 and abs(ay) < 0.50:
+    if az <= -0.32 and 0.15 <= ax <= 0.75 and abs(ay) < 0.50:
         return "úp mặt xuống bàn"
 
-    # 2. NẰM NGỬA: Ngực hướng thẳng lên trời (trục Z dương lớn)
+    # 2. NẰM NGỬA: Ngực hướng thẳng lên trời (trục Z dương lớn, thân phẳng ngang)
     if az >= 0.65 and abs(ax) < 0.45 and abs(ay) < 0.50:
         return "nằm ngửa"
 
@@ -200,23 +200,25 @@ def detect_posture(ax, ay, az):
     if az <= -0.65 and abs(ax) < 0.35 and abs(ay) < 0.50:
         return "nằm úp"
 
-    # 4. NẰM NGHIÊNG TRÁI / PHẢI: Trọng lực dồn sang trục Y (Đã đảo chiều theo thực tế)
-    if ay >= 0.55 and abs(ax) < 0.45:
+    # 4. NẰM NGHIÊNG TRÁI / PHẢI: Trọng lực dồn sang trục Y
+    if ay >= 0.50 and abs(ax) < 0.45:
         return "nằm nghiêng trái"
-    if ay <= -0.55 and abs(ax) < 0.45:
+    if ay <= -0.50 and abs(ax) < 0.45:
         return "nằm nghiêng phải"
 
-    # 5. NGỒI TỰA LƯNG: Lưng ngả ra sau tựa vào ghế (Trục Z dương do ngực hơi ngửa lên)
-    # Dải thực tế khi tựa ghế: az từ 0.15g đến 0.60g, ax từ 0.50g đến 0.95g
-    if az >= 0.15 and 0.50 <= ax <= 0.95 and abs(ay) < 0.45:
+    # 5. NGỒI TỰA LƯNG: Lưng ngả ra sau tựa vào ghế
+    # Bắt nhạy ngay khi chip chỉ cần ngửa nhẹ ra sau (az >= 0.04g, tương đương góc ngửa từ ~2.3 độ trở lên)
+    # Khi ngả lưng: ngực hướng chếch lên nên az luôn dương, ax từ 0.35g đến 1.00g
+    if az >= 0.04 and ax >= 0.35 and abs(ay) < 0.50:
         return "ngồi tựa lưng"
 
-    # 6. NGỒI THẲNG: Ngồi làm việc trên ghế (ax dao động 0.60g đến 0.94g)
-    if 0.60 <= ax <= 0.94 and -0.25 <= az < 0.15 and abs(ay) < 0.45:
+    # 6. NGỒI THẲNG / NGỒI LÀM VIỆC: Người ngồi ghế làm việc bình thường
+    # Khi ngồi làm việc, cơ thể thường hơi cúi nhẹ về phía trước (-0.30 <= az < 0.04) hoặc ax từ 0.50g đến 0.96g
+    if -0.30 <= az < 0.04 and 0.50 <= ax < 0.97 and abs(ay) < 0.45:
         return "ngồi"
 
-    # 7. ĐỨNG THẲNG: Chỉ khi cơ thể đứng thẳng tuyệt đối (ax >= 0.95g, az gần 0)
-    if ax >= 0.95 and abs(az) < 0.15 and abs(ay) < 0.30:
+    # 7. ĐỨNG THẲNG: Chỉ khi cơ thể đứng thẳng tự nhiên (ax >= 0.97g, lưng thẳng tuyệt đối không ngửa |az| < 0.04g)
+    if ax >= 0.97 and abs(az) < 0.04 and abs(ay) < 0.25:
         return "đứng"
 
     # Mặc định suy luận dựa trên trục có giá trị tuyệt đối lớn nhất
@@ -228,7 +230,11 @@ def detect_posture(ax, ay, az):
     elif abs_y > abs_x and abs_y > abs_z:
         return "nằm nghiêng trái" if ay > 0 else "nằm nghiêng phải"
     elif abs_x > abs_y and abs_x > abs_z:
-        return "đứng" if ax > 0.94 else "ngồi"
+        if az >= 0.04:
+            return "ngồi tựa lưng"
+        if ax >= 0.97 and abs(az) < 0.04:
+            return "đứng"
+        return "ngồi"
 
     return "ngồi"
 
