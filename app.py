@@ -94,11 +94,12 @@ MIN_BREATH_BAND_RATIO = 0.25
 BREATH_FREQ_MIN = 0.10
 BREATH_FREQ_MAX = 0.55
 
-# Cấu hình ngưỡng phát hiện té ngã (Fall Detection)
-FALL_IMPACT_THRESHOLD_G = 2.4     # Ngưỡng va đập cực đại SVM
+# Cấu hình ngưỡng phát hiện té ngã (Fall Detection) nhạy và thông minh
+FALL_IMPACT_THRESHOLD_G = 1.7     # Ngưỡng va đập cực đại SVM (hạ xuống 1.7g để bắt nhạy mọi cú ngã thực tế)
 FALL_FREE_FALL_THRESHOLD_G = 0.65  # Ngưỡng rơi tự do
-FALL_GYRO_MAG_THRESHOLD = 2.0      # Ngưỡng vận tốc góc biến thiên mạnh (rad/s)
+FALL_GYRO_MAG_THRESHOLD = 1.8      # Ngưỡng vận tốc góc biến thiên mạnh (rad/s)
 FALL_EMAIL_COOLDOWN_SECONDS = 45   # Thời gian chờ giữa 2 lần gửi email để chống spam
+FALL_MEMORY_WINDOW_SECONDS = 4.0   # Cửa sổ ghi nhớ va đập (4 giây để kết hợp cú va chạm và tư thế nằm sau đó)
 
 # Precomputed FFT constants and BPM classes
 freqs = np.fft.rfftfreq(WINDOW_SIZE, d=1.0 / FS)
@@ -112,6 +113,12 @@ buffer = []
 
 # Buffer ngắn hạn theo dõi va đập và rơi tự do trong 25 mẫu gần nhất (~1 giây)
 recent_samples_buffer = []
+
+# Bộ nhớ ghi nhận va đập gần nhất trong cửa sổ thời gian
+recent_impact = {
+    "time": 0.0,
+    "impact_g": 0.0
+}
 
 # Trạng thái cảnh báo té ngã
 fall_state = {
@@ -194,10 +201,10 @@ def detect_posture(ax, ay, az):
     if az <= -0.65 and abs(ax) < 0.38 and abs(ay) < 0.50:
         return "nằm úp"
 
-    # 4. NẰM NGHIÊNG TRÁI / PHẢI: Trọng lực dồn sang trục Y
-    if ay <= -0.60 and abs(ax) < 0.50:
+    # 4. NẰM NGHIÊNG TRÁI / PHẢI: Trọng lực dồn sang trục Y (Đã đảo chiều theo cảm biến thực tế)
+    if ay >= 0.55 and abs(ax) < 0.50:
         return "nằm nghiêng trái"
-    if ay >= 0.60 and abs(ax) < 0.50:
+    if ay <= -0.55 and abs(ax) < 0.50:
         return "nằm nghiêng phải"
 
     # 5. ĐỨNG THẲNG: Trọng lực dồn dọc theo thân người (trục X)
@@ -219,7 +226,7 @@ def detect_posture(ax, ay, az):
             return "nằm úp" if abs(ax) < 0.25 else "úp mặt xuống bàn"
         return "nằm ngửa"
     elif abs_y > abs_x and abs_y > abs_z:
-        return "nằm nghiêng phải" if ay > 0 else "nằm nghiêng trái"
+        return "nằm nghiêng trái" if ay > 0 else "nằm nghiêng phải"
     elif abs_x > abs_y and abs_x > abs_z:
         return "đứng" if ax > 0.75 else "ngồi"
 
@@ -232,15 +239,16 @@ def detect_posture(ax, ay, az):
 
 def check_fall_event(samples, current_posture, current_bpm="—"):
     """
-    Phát hiện sự cố té ngã dựa trên chuỗi mẫu gần nhất:
-    1. Phát hiện đỉnh gia tốc va đập SVM >= 2.4g
-    2. Đi kèm vận tốc góc gyro lớn hoặc trước đó có giảm gia tốc (free-fall)
-    3. Tư thế sau va chạm là một trong các tư thế nằm hoặc gục xuống bàn
+    Phát hiện sự cố té ngã thông minh:
+    1. Ghi nhận cú va đập SVM >= 1.7g hoặc góc quay biến thiên lớn.
+    2. Lưu giữ vào bộ nhớ va đập trong cửa sổ 4.0 giây.
+    3. Khi tư thế chuyển sang NẰM (hoặc ÚP MẶT XUỐNG BÀN) trong vòng 4.0 giây sau va chạm
+       -> KÍCH HOẠT CẢNH BÁO TÉ NGÃ NGAY LẬP TỨC.
     """
-    global fall_state
+    global fall_state, recent_impact
 
     max_impact = 0.0
-    detected_impact = False
+    has_high_gyro = False
 
     for s in samples:
         ax = float(s.get("ax", 0))
@@ -263,38 +271,52 @@ def check_fall_event(samples, current_posture, current_bpm="—"):
             max_impact = mag
 
         gyro_mag = float(np.sqrt(gx**2 + gy**2 + gz**2))
+        if gyro_mag >= FALL_GYRO_MAG_THRESHOLD:
+            has_high_gyro = True
 
-        # Kiểm tra ngưỡng va đập mạnh
-        if mag >= FALL_IMPACT_THRESHOLD_G or (mag >= 2.0 and gyro_mag >= FALL_GYRO_MAG_THRESHOLD):
-            detected_impact = True
+    now = time.time()
 
-    # Nếu có va đập mạnh và tư thế cơ thể sau đó là nằm hoặc gục
-    lying_postures = ["nằm ngửa", "nằm úp", "nằm nghiêng trái", "nằm nghiêng phải", "úp mặt xuống bàn"]
-    if detected_impact and (current_posture in lying_postures):
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        fall_state["alert"] = True
-        fall_state["time"] = now_str
-        fall_state["impact_g"] = round(max_impact, 2)
-        fall_state["posture_after"] = current_posture
+    # 1. Nếu batch có cú va đập mạnh: ghi nhớ vào recent_impact
+    if max_impact >= FALL_IMPACT_THRESHOLD_G or (max_impact >= 1.5 and has_high_gyro):
+        recent_impact["time"] = now
+        recent_impact["impact_g"] = round(max(recent_impact.get("impact_g", 0.0), max_impact), 2)
         fall_state["dismissed"] = False
+        print(f"⚡ [VA ĐẬP PHÁT HIỆN] Lực va đập: {recent_impact['impact_g']}g (Ghi nhớ trong {FALL_MEMORY_WINDOW_SECONDS}s)")
 
-        print(f"🚨 [CẢNH BÁO TÉ NGÃ] Phát hiện ngã lúc {now_str} | Lực va đập: {max_impact:.2f}g | Tư thế: {current_posture}")
+    # 2. Kiểm tra xem trong vòng 4 giây qua có cú va đập nào không
+    time_since_impact = now - recent_impact.get("time", 0.0)
+    lying_postures = ["nằm ngửa", "nằm úp", "nằm nghiêng trái", "nằm nghiêng phải", "úp mặt xuống bàn"]
 
-        # Kiểm tra Cooldown để gửi email (chống spam)
-        current_time = time.time()
-        if (current_time - fall_state["last_email_time"]) > FALL_EMAIL_COOLDOWN_SECONDS:
-            fall_state["last_email_time"] = current_time
-            fall_state["email_status"] = "Đang gửi email..."
+    # Nếu vừa có va chạm VÀ tư thế hiện tại là Nằm / Úp mặt xuống bàn
+    if time_since_impact <= FALL_MEMORY_WINDOW_SECONDS and (current_posture in lying_postures):
+        if not fall_state["alert"] and not fall_state.get("dismissed", False):
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            impact_val = recent_impact.get("impact_g", max_impact)
+            fall_state["alert"] = True
+            fall_state["time"] = now_str
+            fall_state["impact_g"] = impact_val if impact_val > 0 else round(max_impact, 2)
+            fall_state["posture_after"] = current_posture
 
-            def on_email_done(success, message):
-                fall_state["email_status"] = "Đã gửi email thành công" if success else f"Lỗi gửi email: {message}"
+            print(f"🚨 [CẢNH BÁO TÉ NGÃ ĐÃ KÍCH HOẠT!] Thời gian: {now_str} | Lực va đập: {fall_state['impact_g']}g | Tư thế: {current_posture}")
 
-            send_fall_alert_email({
-                "time": now_str,
-                "impact_g": max_impact,
-                "posture": current_posture,
-                "bpm": current_bpm
-            }, callback=on_email_done)
+            # Reset bộ nhớ va đập để không kích hoạt lặp
+            recent_impact["time"] = 0.0
+            recent_impact["impact_g"] = 0.0
+
+            # Gửi email cảnh báo khẩn cấp
+            if (now - fall_state["last_email_time"]) > FALL_EMAIL_COOLDOWN_SECONDS:
+                fall_state["last_email_time"] = now
+                fall_state["email_status"] = "Đang gửi email..."
+
+                def on_email_done(success, message):
+                    fall_state["email_status"] = "Đã gửi email thành công" if success else f"Lỗi gửi email: {message}"
+
+                send_fall_alert_email({
+                    "time": now_str,
+                    "impact_g": fall_state["impact_g"],
+                    "posture": current_posture,
+                    "bpm": current_bpm
+                }, callback=on_email_done)
         else:
             print("[Email Alert] Đang trong thời gian cooldown, tạm hoãn gửi email.")
 
