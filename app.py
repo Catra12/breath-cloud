@@ -96,11 +96,11 @@ BREATH_FREQ_MIN = 0.10
 BREATH_FREQ_MAX = 0.55
 
 # Cấu hình ngưỡng phát hiện té ngã (Fall Detection) nhạy và thông minh
-FALL_IMPACT_THRESHOLD_G = 1.7     # Ngưỡng va đập cực đại SVM (hạ xuống 1.7g để bắt nhạy mọi cú ngã thực tế)
+FALL_IMPACT_THRESHOLD_G = 1.6     # Ngưỡng va đập cực đại SVM (hạ xuống 1.6g để bắt nhạy mọi cú ngã thực tế)
 FALL_FREE_FALL_THRESHOLD_G = 0.65  # Ngưỡng rơi tự do
 FALL_GYRO_MAG_THRESHOLD = 1.8      # Ngưỡng vận tốc góc biến thiên mạnh (rad/s)
-FALL_EMAIL_COOLDOWN_SECONDS = 45   # Thời gian chờ giữa 2 lần gửi email để chống spam
-FALL_MEMORY_WINDOW_SECONDS = 4.0   # Cửa sổ ghi nhớ va đập (4 giây để kết hợp cú va chạm và tư thế nằm sau đó)
+FALL_EMAIL_COOLDOWN_SECONDS = 15   # Giảm xuống 15s để người dùng test thoải mái mà không bị nghẽn
+FALL_MEMORY_WINDOW_SECONDS = 5.0   # Cửa sổ ghi nhớ va đập (5 giây để kết hợp cú va chạm và tư thế nằm sau đó)
 
 # Precomputed FFT constants and BPM classes
 freqs = np.fft.rfftfreq(WINDOW_SIZE, d=1.0 / FS)
@@ -276,17 +276,26 @@ def check_fall_event(samples, current_posture, current_bpm="—"):
     now = time.time()
 
     # 1. Nếu batch có cú va đập mạnh: ghi nhớ vào recent_impact
-    if max_impact >= FALL_IMPACT_THRESHOLD_G or (max_impact >= 1.5 and has_high_gyro):
+    if max_impact >= FALL_IMPACT_THRESHOLD_G or (max_impact >= 1.35 and has_high_gyro):
         recent_impact["time"] = now
         recent_impact["impact_g"] = round(max(recent_impact.get("impact_g", 0.0), max_impact), 2)
         fall_state["dismissed"] = False
         print(f"⚡ [VA ĐẬP PHÁT HIỆN] Lực va đập: {recent_impact['impact_g']}g (Ghi nhớ trong {FALL_MEMORY_WINDOW_SECONDS}s)")
 
-    # 2. Kiểm tra xem trong vòng 4 giây qua có cú va đập nào không
+    # 2. Kiểm tra tư thế nằm và thời gian va chạm
     time_since_impact = now - recent_impact.get("time", 0.0)
     lying_postures = ["nằm ngửa", "nằm úp", "nằm nghiêng trái", "nằm nghiêng phải", "úp mặt xuống bàn"]
 
-    # Nếu vừa có va chạm VÀ tư thế hiện tại là Nằm / Úp mặt xuống bàn
+    # 3. TỰ ĐỘNG PHỤC HỒI (AUTO-RECOVERY):
+    # Khi người dùng đứng dậy hoặc ngồi dậy (không còn ở tư thế nằm):
+    # Tự động xóa cảnh báo, tắt còi và sẵn sàng 100% cho các lần té ngã tiếp theo!
+    if current_posture not in lying_postures:
+        if fall_state["alert"] or fall_state.get("dismissed", False):
+            print(f"✅ [TỰ ĐỘNG PHỤC HỒI] Người dùng đã đứng/ngồi dậy ({current_posture}). Reset trạng thái, sẵn sàng cho lần té ngã tiếp theo!")
+            fall_state["alert"] = False
+            fall_state["dismissed"] = False
+
+    # 4. Nếu vừa có va chạm VÀ tư thế hiện tại là Nằm / Úp mặt xuống bàn
     if time_since_impact <= FALL_MEMORY_WINDOW_SECONDS and (current_posture in lying_postures):
         if not fall_state["alert"] and not fall_state.get("dismissed", False):
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -316,8 +325,8 @@ def check_fall_event(samples, current_posture, current_bpm="—"):
                     "posture": current_posture,
                     "bpm": current_bpm
                 }, callback=on_email_done)
-        else:
-            print("[Email Alert] Đang trong thời gian cooldown, tạm hoãn gửi email.")
+            else:
+                print(f"[Email Alert] Đang trong thời gian cooldown ({FALL_EMAIL_COOLDOWN_SECONDS}s), tạm hoãn gửi email.")
 
 # ==================================================
 # PREPROCESSING & AI BPM
