@@ -1,21 +1,22 @@
 /*
- * =============================================
- * BREATH AI CLOUD — ESP32 Client v2
- * =============================================
- * Fix quan trọng so với code cũ:
- *   1. WiFiClientSecure + setInsecure()
- *      → Cho phép HTTPS tới Render.com
- *      → Code cũ dùng HTTPClient thường = fail -1
- *   2. Gyro gửi đúng đơn vị rad/s
- *   3. WiFi tự reconnect khi mất kết nối
- *   4. Retry 3 lần khi gửi batch thất bại
- *      → Xử lý Render cold start (~30s)
- *   5. Tự động phát hiện va đập té ngã in ra Serial
- * =============================================
+ * ====================================================================
+ * BREATH AI CLOUD — ESP32 Client v3 (Dual-Core FreeRTOS Non-Blocking)
+ * ====================================================================
+ * Cải tiến đột phá v3:
+ *   1. Chạy đa nhân FreeRTOS (Core 0 + Core 1):
+ *      - Core 0: Đọc cảm biến liên tục mỗi 40ms (25 Hz) không bao giờ bị dừng
+ *      - Core 1: Gửi HTTP/HTTPS qua Wi-Fi
+ *      → Dù HTTPS mất 500ms-1500ms phản hồi, Core 0 VẪN ĐỌC LIÊN TỤC,
+ *        không bị mù (blind spot), BẮT CHUẨN CÚ NGÃ NGAY LẦN ĐẦU TIÊN!
+ *   2. Chốt va đập tức thì (Latched Impact):
+ *      Bất kỳ cú rơi / va đập nào (>= 1.35g hoặc rơi tự do <= 0.65g) đều
+ *      được ghi nhớ và gửi ngay cờ {"impact": true, "impact_g": ...} lên Server.
+ *   3. WiFiClientSecure + setInsecure() cho Render Cloud.
+ * ====================================================================
  */
 
 #include <WiFi.h>
-#include <WiFiClientSecure.h>   // BẮT BUỘC để dùng HTTPS
+#include <WiFiClientSecure.h>   // BẮT BUỘC để dùng HTTPS tới Render
 #include <HTTPClient.h>
 #include <Wire.h>
 #include "MPU6050.h"
@@ -32,7 +33,7 @@ const char* WIFI_PASSWORD = "caphemuoi";
 /* 
  * CHỌN ĐƯỜNG DẪN SERVER:
  * - Render Cloud : https://breath-cloud.onrender.com/posture
- * - Local Test   : http://<IP_MAY_TINH>:5000/posture
+ * - Local Test   : http://192.168.1.94:5000/posture
  */
 const char* SERVER_URL    = "https://breath-cloud.onrender.com/posture";
 
@@ -42,13 +43,13 @@ const char* SERVER_URL    = "https://breath-cloud.onrender.com/posture";
 
 const unsigned long SAMPLE_INTERVAL_MS = 40;     // 25 Hz = mỗi 40ms 1 mẫu
 const int           BATCH_SIZE         = 5;      // Gửi mỗi 5 mẫu (200ms/lần)
-const int           HTTP_TIMEOUT_MS    = 15000;  // Render free tier có thể chậm
-const int           RETRY_COUNT        = 3;      // Số lần retry khi lỗi
-const int           RETRY_DELAY_MS     = 3000;   // Chờ 3s giữa các lần retry
-const float         FALL_THRESHOLD_G   = 2.4f;   // Ngưỡng phát hiện va đập té ngã (g)
+const int           HTTP_TIMEOUT_MS    = 6000;   // Timeout 6 giây
+const int           RETRY_COUNT        = 2;      // Số lần retry
+const int           RETRY_DELAY_MS     = 1000;   // Chờ 1s giữa các lần retry
+const float         FALL_THRESHOLD_G   = 1.35f;  // Ngưỡng va đập cực nhạy cho thử nghiệm thực tế (g)
 
 // =============================================
-// BUFFER CỤC BỘ
+// BUFFER & BIẾN ĐỒNG BỘ DUAL-CORE
 // =============================================
 
 float ax_buf[BATCH_SIZE];
@@ -58,9 +59,82 @@ float gx_buf[BATCH_SIZE];
 float gy_buf[BATCH_SIZE];
 float gz_buf[BATCH_SIZE];
 
-int           buf_idx      = 0;
-unsigned long lastSampleAt = 0;
-int           failCount    = 0;
+float send_ax[BATCH_SIZE];
+float send_ay[BATCH_SIZE];
+float send_az[BATCH_SIZE];
+float send_gx[BATCH_SIZE];
+float send_gy[BATCH_SIZE];
+float send_gz[BATCH_SIZE];
+
+volatile int   buf_idx         = 0;
+volatile bool  batch_ready     = false;
+volatile bool  latched_impact  = false;
+volatile float max_impact_seen = 0.0f;
+int            failCount       = 0;
+
+TaskHandle_t TaskSampling = NULL;
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+// =============================================
+// KHAI BÁO HÀM
+// =============================================
+void connectWiFi();
+void debugRawValues();
+void sendBatch(bool has_impact, float peak_g);
+String buildJson(bool has_impact, float peak_g);
+
+// =============================================
+// TASK ĐỌC CẢM BIẾN TRÊN CORE 0 (ĐỘC LẬP 100%)
+// =============================================
+
+void samplingTask(void * pvParameters) {
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    const TickType_t xFrequency = pdMS_TO_TICKS(SAMPLE_INTERVAL_MS);
+
+    for (;;) {
+        int16_t ax_r, ay_r, az_r, gx_r, gy_r, gz_r;
+        mpu.getMotion6(&ax_r, &ay_r, &az_r, &gx_r, &gy_r, &gz_r);
+
+        float ax = ax_r / 16384.0f;
+        float ay = ay_r / 16384.0f;
+        float az = az_r / 16384.0f;
+        float gx = (gx_r / 131.0f) * (PI / 180.0f);
+        float gy = (gy_r / 131.0f) * (PI / 180.0f);
+        float gz = (gz_r / 131.0f) * (PI / 180.0f);
+
+        // Tính lực gia tốc toàn phần SVM
+        float svm = sqrt(ax * ax + ay * ay + az * az);
+
+        // Bắt đỉnh va đập tức thì
+        if (svm > max_impact_seen) {
+            max_impact_seen = svm;
+        }
+
+        // Bắt sự kiện va chạm hoặc rơi tự do
+        if (svm >= FALL_THRESHOLD_G || svm <= 0.65f) {
+            latched_impact = true;
+            Serial.printf("⚡ [CORE 0 BẮT VA ĐẬP] SVM=%.2fg!\n", svm);
+        }
+
+        portENTER_CRITICAL(&mux);
+        if (buf_idx < BATCH_SIZE) {
+            ax_buf[buf_idx] = ax;
+            ay_buf[buf_idx] = ay;
+            az_buf[buf_idx] = az;
+            gx_buf[buf_idx] = gx;
+            gy_buf[buf_idx] = gy;
+            gz_buf[buf_idx] = gz;
+            buf_idx++;
+
+            if (buf_idx >= BATCH_SIZE) {
+                batch_ready = true;
+            }
+        }
+        portEXIT_CRITICAL(&mux);
+
+        vTaskDelayUntil(&xLastWakeTime, xFrequency);
+    }
+}
 
 // =============================================
 // SETUP
@@ -70,9 +144,9 @@ void setup() {
     Serial.begin(115200);
     delay(300);
 
-    Serial.println("\n==============================");
-    Serial.println("  BREATH AI — ESP32 Client v2 ");
-    Serial.println("==============================");
+    Serial.println("\n============================================");
+    Serial.println("  BREATH AI — ESP32 Dual-Core Non-Blocking  ");
+    Serial.println("============================================");
 
     // I2C: SDA=5, SCL=4 (hoặc mặc định SDA=21, SCL=22)
     Wire.begin(5, 4);
@@ -89,31 +163,37 @@ void setup() {
     }
     Serial.println("[MPU] OK — Cảm biến MPU6050 đã sẵn sàng!");
 
-    // In ra để kiểm tra giá trị raw khi không chuyển đổi
     debugRawValues();
-
     connectWiFi();
+
+    // Tạo Task chạy riêng biệt trên Core 0 để đọc mẫu liên tục 25 Hz
+    xTaskCreatePinnedToCore(
+        samplingTask,
+        "SamplingTask",
+        4096,
+        NULL,
+        2,
+        &TaskSampling,
+        0   // Ghim vào Core 0 (Wi-Fi chạy trên Core 1)
+    );
+    Serial.println("[SYSTEM] Task đọc cảm biến Core 0 đã khởi chạy thành công!");
 }
 
 // =============================================
-// DEBUG RAW — Chạy 1 lần khi khởi động
+// DEBUG RAW
 // =============================================
 
 void debugRawValues() {
-    Serial.println("[DEBUG] Raw values khi khởi động (FS ±2g / ±250dps):");
     int16_t ax_r, ay_r, az_r, gx_r, gy_r, gz_r;
     mpu.getMotion6(&ax_r, &ay_r, &az_r, &gx_r, &gy_r, &gz_r);
 
     float ax = ax_r / 16384.0f;
     float ay = ay_r / 16384.0f;
     float az = az_r / 16384.0f;
-    float gx_dps  = gx_r / 131.0f;               // đơn vị DPS
-    float gx_rads = gx_dps * (PI / 180.0f);       // đổi sang rad/s
+    float gx_rads = (gx_r / 131.0f) * (PI / 180.0f);
 
-    Serial.printf("  AX=%.4f AY=%.4f AZ=%.4f (g)\n", ax, ay, az);
-    Serial.printf("  GX_raw=%d  GX_dps=%.4f  GX_rads=%.5f\n",
-        gx_r, gx_dps, gx_rads);
-    Serial.println("  → Giá trị gửi lên server sẽ là rad/s (cột GX_rads)");
+    Serial.printf("[DEBUG] Khởi động: AX=%.3f AY=%.3f AZ=%.3f (g) | GX=%.4f (rad/s)\n",
+        ax, ay, az, gx_rads);
 }
 
 // =============================================
@@ -127,8 +207,8 @@ void connectWiFi() {
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
     int tries = 0;
-    while (WiFi.status() != WL_CONNECTED && tries < 40) {
-        delay(500);
+    while (WiFi.status() != WL_CONNECTED && tries < 30) {
+        delay(300);
         Serial.print(".");
         tries++;
     }
@@ -139,85 +219,75 @@ void connectWiFi() {
             WiFi.localIP().toString().c_str(),
             WiFi.RSSI());
     } else {
-        Serial.println("[WiFi] TIMEOUT — Không kết nối được WiFi (vẫn xuất qua cáp USB)");
+        Serial.println("[WiFi] TIMEOUT — Tiếp tục thử lại ở background");
     }
 }
 
 // =============================================
-// LOOP CHÍNH
+// LOOP CHÍNH (CHẠY TRÊN CORE 1)
 // =============================================
 
 void loop() {
-    unsigned long now = millis();
-    if (now - lastSampleAt < SAMPLE_INTERVAL_MS) return;
-    lastSampleAt = now;
+    bool ready_to_send = false;
+    bool send_impact = false;
+    float send_impact_g = 0.0f;
 
-    // ── Đọc MPU6050 ──────────────────────────────
-    int16_t ax_r, ay_r, az_r, gx_r, gy_r, gz_r;
-    mpu.getMotion6(&ax_r, &ay_r, &az_r, &gx_r, &gy_r, &gz_r);
+    portENTER_CRITICAL(&mux);
+    if (batch_ready) {
+        memcpy(send_ax, ax_buf, sizeof(ax_buf));
+        memcpy(send_ay, ay_buf, sizeof(ay_buf));
+        memcpy(send_az, az_buf, sizeof(az_buf));
+        memcpy(send_gx, gx_buf, sizeof(gx_buf));
+        memcpy(send_gy, gy_buf, sizeof(gy_buf));
+        memcpy(send_gz, gz_buf, sizeof(gz_buf));
 
-    // Accel: ÷ 16384 → đơn vị g (±2g full scale)
-    float ax = ax_r / 16384.0f;
-    float ay = ay_r / 16384.0f;
-    float az = az_r / 16384.0f;
+        send_impact = latched_impact;
+        send_impact_g = max_impact_seen;
 
-    // Gyro: ÷ 131 → DPS, rồi × π/180 → rad/s
-    float gx = (gx_r / 131.0f) * (PI / 180.0f);
-    float gy = (gy_r / 131.0f) * (PI / 180.0f);
-    float gz = (gz_r / 131.0f) * (PI / 180.0f);
-
-    // Kiểm tra phát hiện va đập té ngã tại chip
-    float svm = sqrt(ax * ax + ay * ay + az * az);
-    if (svm >= FALL_THRESHOLD_G) {
-        Serial.printf("🚨 [CHIP CẢNH BÁO TÉ NGÃ] Va đập cực mạnh: SVM=%.2fg!\n", svm);
+        // Reset buffer cho Core 0 tiếp tục lưu mẫu
+        latched_impact = false;
+        max_impact_seen = 0.0f;
+        buf_idx = 0;
+        batch_ready = false;
+        ready_to_send = true;
     }
+    portEXIT_CRITICAL(&mux);
 
-    // ── Lưu vào buffer ───────────────────────────
-    ax_buf[buf_idx] = ax;
-    ay_buf[buf_idx] = ay;
-    az_buf[buf_idx] = az;
-    gx_buf[buf_idx] = gx;
-    gy_buf[buf_idx] = gy;
-    gz_buf[buf_idx] = gz;
-
-    buf_idx++;
-
-    // In log ra Serial USB để serial_bridge.py có thể đọc song song
-    Serial.printf("BUF=%d  AX=%.3f AY=%.3f AZ=%.3f  GX=%.5f GY=%.5f GZ=%.5f\n",
-        buf_idx, ax, ay, az, gx, gy, gz);
-
-    // ── Gửi batch ────────────────────────────────
-    if (buf_idx >= BATCH_SIZE) {
+    if (ready_to_send) {
         if (WiFi.status() != WL_CONNECTED) {
-            Serial.println("[WiFi] Mất kết nối — đang reconnect...");
             connectWiFi();
         }
 
         if (WiFi.status() == WL_CONNECTED) {
-            sendBatch();
+            sendBatch(send_impact, send_impact_g);
         } else {
-            Serial.println("[HTTP] Bỏ qua batch Wi-Fi — xuất qua cáp USB");
+            // Khi mất Wi-Fi, in ra Serial để serial_bridge.py bắt
+            Serial.printf("USB_DATA: AX=%.3f AY=%.3f AZ=%.3f IMPACT=%d\n",
+                send_ax[BATCH_SIZE-1], send_ay[BATCH_SIZE-1], send_az[BATCH_SIZE-1], send_impact);
         }
-
-        buf_idx = 0;
     }
+
+    delay(10);
 }
 
 // =============================================
 // BUILD JSON
 // =============================================
 
-String buildJson() {
-    String json = "{\"batch\":[";
+String buildJson(bool has_impact, float peak_g) {
+    String json = "{\"impact\":";
+    json += has_impact ? "true" : "false";
+    json += ",\"impact_g\":" + String(peak_g, 2);
+    json += ",\"batch\":[";
     for (int i = 0; i < BATCH_SIZE; i++) {
         if (i > 0) json += ",";
         json += "{";
-        json += "\"ax\":"  + String(ax_buf[i], 4);
-        json += ",\"ay\":" + String(ay_buf[i], 4);
-        json += ",\"az\":" + String(az_buf[i], 4);
-        json += ",\"gx\":" + String(gx_buf[i], 6);
-        json += ",\"gy\":" + String(gy_buf[i], 6);
-        json += ",\"gz\":" + String(gz_buf[i], 6);
+        json += "\"ax\":"  + String(send_ax[i], 4);
+        json += ",\"ay\":" + String(send_ay[i], 4);
+        json += ",\"az\":" + String(send_az[i], 4);
+        json += ",\"gx\":" + String(send_gx[i], 6);
+        json += ",\"gy\":" + String(send_gy[i], 6);
+        json += ",\"gz\":" + String(send_gz[i], 6);
         json += "}";
     }
     json += "]}";
@@ -225,11 +295,11 @@ String buildJson() {
 }
 
 // =============================================
-// GỬI BATCH — HTTPS POST với retry
+// GỬI BATCH (CHẠY TRÊN CORE 1 — KHÔNG ẢNH HƯỞNG CORE 0)
 // =============================================
 
-void sendBatch() {
-    String json = buildJson();
+void sendBatch(bool has_impact, float peak_g) {
+    String json = buildJson(has_impact, peak_g);
 
     for (int attempt = 1; attempt <= RETRY_COUNT; attempt++) {
         bool isHttps = String(SERVER_URL).startsWith("https://");
@@ -261,25 +331,18 @@ void sendBatch() {
         int code = http.POST(json);
 
         if (code == 200) {
-            // Thành công: Server trả về kết quả tư thế và té ngã ngay lập tức
             String resp = http.getString();
             failCount = 0;
             Serial.printf("[HTTP] 200 OK: %s\n", resp.c_str());
             http.end();
             return;
         } else if (code > 0) {
-            Serial.printf("[HTTP] Code %d: %s\n", code, http.getString().c_str());
+            Serial.printf("[HTTP] Code %d\n", code);
             failCount++;
             http.end();
             return;
         } else {
-            Serial.printf("[HTTP] Lỗi kết nối code=%d (%s) [lần %d/%d]\n",
-                code,
-                http.errorToString(code).c_str(),
-                attempt,
-                RETRY_COUNT);
             http.end();
-
             if (attempt < RETRY_COUNT) {
                 delay(RETRY_DELAY_MS);
             }
@@ -287,10 +350,10 @@ void sendBatch() {
     }
 
     failCount++;
-    if (failCount >= 5) {
-        Serial.println("[WiFi] Quá nhiều lỗi — reconnect WiFi...");
+    if (failCount >= 6) {
+        Serial.println("[WiFi] Reconnect WiFi...");
         WiFi.disconnect(true);
-        delay(1000);
+        delay(500);
         connectWiFi();
         failCount = 0;
     }

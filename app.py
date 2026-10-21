@@ -236,12 +236,12 @@ def detect_posture(ax, ay, az):
 # ==================================================
 
 
-def check_fall_event(samples, current_posture, current_bpm="—"):
+def check_fall_event(samples, current_posture, current_bpm="—", is_chip_impact=False, chip_impact_g=0.0):
     """
     Phát hiện sự cố té ngã thông minh:
-    1. Ghi nhận cú va đập SVM >= 1.7g hoặc góc quay biến thiên lớn.
-    2. Lưu giữ vào bộ nhớ va đập trong cửa sổ 4.0 giây.
-    3. Khi tư thế chuyển sang NẰM (hoặc ÚP MẶT XUỐNG BÀN) trong vòng 4.0 giây sau va chạm
+    1. Ghi nhận cú va đập SVM >= 1.25g, hoặc rơi tự do, hoặc cờ va đập từ chip ESP32.
+    2. Lưu giữ vào bộ nhớ va đập trong cửa sổ 6.0 giây.
+    3. Khi tư thế chuyển sang NẰM (hoặc ĐỔ GỤC) trong vòng 6.0 giây sau va chạm
        -> KÍCH HOẠT CẢNH BÁO TÉ NGÃ NGAY LẬP TỨC.
     """
     global fall_state, recent_impact
@@ -276,19 +276,26 @@ def check_fall_event(samples, current_posture, current_bpm="—"):
             min_impact = mag
 
         gyro_mag = float(np.sqrt(gx**2 + gy**2 + gz**2))
-        if gyro_mag >= FALL_GYRO_MAG_THRESHOLD:
+        if gyro_mag >= 1.0:
             has_high_gyro = True
 
     now = time.time()
 
-    # 1. Phát hiện va đập / rơi tự do (Cực nhạy cho kiểm tra thực tế)
-    is_impact = (max_impact >= FALL_IMPACT_THRESHOLD_G) or \
-                (max_impact >= 1.20 and has_high_gyro) or \
-                (min_impact <= FALL_FREE_FALL_THRESHOLD_G and max_impact >= 1.15)
+    # 1. Phát hiện va đập / rơi tự do (Siêu nhạy - bắt trọn ngay lần rơi đầu tiên)
+    if is_chip_impact:
+        recent_impact["time"] = now
+        recent_impact["impact_g"] = round(max(recent_impact.get("impact_g", 0.0), chip_impact_g, 1.8), 2)
+        fall_state["dismissed"] = False
+        print(f"⚡ [CHIP BÁO VA ĐẬP TRỰC TIẾP] Lực va đập: {recent_impact['impact_g']}g (Ghi nhớ trong {FALL_MEMORY_WINDOW_SECONDS}s)")
+
+    is_impact = (max_impact >= 1.25) or \
+                (max_impact >= 1.15 and has_high_gyro) or \
+                (min_impact <= 0.75 and max_impact >= 1.10) or \
+                is_chip_impact
 
     if is_impact:
         recent_impact["time"] = now
-        recent_impact["impact_g"] = round(max(recent_impact.get("impact_g", 0.0), max_impact), 2)
+        recent_impact["impact_g"] = round(max(recent_impact.get("impact_g", 0.0), max_impact, chip_impact_g), 2)
         fall_state["dismissed"] = False
         print(f"⚡ [VA ĐẬP PHÁT HIỆN] Lực va đập: {recent_impact['impact_g']}g (Ghi nhớ trong {FALL_MEMORY_WINDOW_SECONDS}s)")
 
@@ -769,8 +776,10 @@ def posture():
         posture_result = detect_posture(ax, ay, az)
         bpm_result = predict_bpm()
 
-        # Kiểm tra sự kiện té ngã trên mảng mẫu nhận được
-        check_fall_event(samples, posture_result, bpm_result.get("bpm", "—"))
+        # Kiểm tra sự kiện té ngã trên mảng mẫu nhận được (kết hợp cờ từ chip ESP32)
+        is_chip_impact = bool(payload.get("impact", False))
+        chip_impact_g = float(payload.get("impact_g", 0.0))
+        check_fall_event(samples, posture_result, bpm_result.get("bpm", "—"), is_chip_impact, chip_impact_g)
 
         latest_data = {
             "posture": posture_result,
