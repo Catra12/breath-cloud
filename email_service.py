@@ -29,12 +29,21 @@ def load_env_vars():
                         config[k.strip()] = v.strip().strip("\"'")
         except Exception as e:
             print(f"[Email Config] Lỗi đọc .env: {e}")
+
+    # Ưu tiên biến môi trường từ hệ thống (Render Cloud, Docker, OS)
+    for k in config.keys():
+        env_val = os.environ.get(k)
+        if env_val and env_val.strip():
+            config[k] = env_val.strip().strip("\"'")
+
     return config
 
 
 def save_env_vars(new_config):
     current = load_env_vars()
     current.update({k: str(v) for k, v in new_config.items() if v is not None})
+    for k, v in current.items():
+        os.environ[k] = str(v)
     try:
         with open(ENV_FILE, "w", encoding="utf-8") as f:
             f.write("# ==================================================\n")

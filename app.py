@@ -96,11 +96,11 @@ BREATH_FREQ_MIN = 0.10
 BREATH_FREQ_MAX = 0.55
 
 # Cấu hình ngưỡng phát hiện té ngã (Fall Detection) nhạy và thông minh
-FALL_IMPACT_THRESHOLD_G = 1.6     # Ngưỡng va đập cực đại SVM (hạ xuống 1.6g để bắt nhạy mọi cú ngã thực tế)
-FALL_FREE_FALL_THRESHOLD_G = 0.65  # Ngưỡng rơi tự do
-FALL_GYRO_MAG_THRESHOLD = 1.8      # Ngưỡng vận tốc góc biến thiên mạnh (rad/s)
-FALL_EMAIL_COOLDOWN_SECONDS = 15   # Giảm xuống 15s để người dùng test thoải mái mà không bị nghẽn
-FALL_MEMORY_WINDOW_SECONDS = 5.0   # Cửa sổ ghi nhớ va đập (5 giây để kết hợp cú va chạm và tư thế nằm sau đó)
+FALL_IMPACT_THRESHOLD_G = 1.35    # Ngưỡng va đập cực đại SVM (1.35g để bắt nhạy mọi cú rơi thử nghiệm thực tế)
+FALL_FREE_FALL_THRESHOLD_G = 0.70 # Ngưỡng rơi tự do (< 0.70g)
+FALL_GYRO_MAG_THRESHOLD = 1.0     # Ngưỡng vận tốc góc biến thiên (rad/s, ~57 deg/s)
+FALL_EMAIL_COOLDOWN_SECONDS = 15  # Giảm xuống 15s để người dùng test thoải mái mà không bị nghẽn
+FALL_MEMORY_WINDOW_SECONDS = 6.0  # Cửa sổ ghi nhớ va đập (6 giây để kết hợp cú va chạm và tư thế nằm sau đó)
 
 # Precomputed FFT constants and BPM classes
 freqs = np.fft.rfftfreq(WINDOW_SIZE, d=1.0 / FS)
@@ -247,7 +247,9 @@ def check_fall_event(samples, current_posture, current_bpm="—"):
     global fall_state, recent_impact
 
     max_impact = 0.0
+    min_impact = 999.0
     has_high_gyro = False
+    last_ax = 0.0
 
     for s in samples:
         ax = float(s.get("ax", 0))
@@ -266,8 +268,12 @@ def check_fall_event(samples, current_posture, current_bpm="—"):
             ax, ay, az = ax / 16384.0, ay / 16384.0, az / 16384.0
             mag = mag / 16384.0
 
+        last_ax = ax
+
         if mag > max_impact:
             max_impact = mag
+        if mag < min_impact:
+            min_impact = mag
 
         gyro_mag = float(np.sqrt(gx**2 + gy**2 + gz**2))
         if gyro_mag >= FALL_GYRO_MAG_THRESHOLD:
@@ -275,8 +281,12 @@ def check_fall_event(samples, current_posture, current_bpm="—"):
 
     now = time.time()
 
-    # 1. Nếu batch có cú va đập mạnh: ghi nhớ vào recent_impact
-    if max_impact >= FALL_IMPACT_THRESHOLD_G or (max_impact >= 1.35 and has_high_gyro):
+    # 1. Phát hiện va đập / rơi tự do (Cực nhạy cho kiểm tra thực tế)
+    is_impact = (max_impact >= FALL_IMPACT_THRESHOLD_G) or \
+                (max_impact >= 1.20 and has_high_gyro) or \
+                (min_impact <= FALL_FREE_FALL_THRESHOLD_G and max_impact >= 1.15)
+
+    if is_impact:
         recent_impact["time"] = now
         recent_impact["impact_g"] = round(max(recent_impact.get("impact_g", 0.0), max_impact), 2)
         fall_state["dismissed"] = False
@@ -287,16 +297,18 @@ def check_fall_event(samples, current_posture, current_bpm="—"):
     lying_postures = ["nằm ngửa", "nằm úp", "nằm nghiêng trái", "nằm nghiêng phải", "úp mặt xuống bàn"]
 
     # 3. TỰ ĐỘNG PHỤC HỒI (AUTO-RECOVERY):
-    # Khi người dùng đứng dậy hoặc ngồi dậy (không còn ở tư thế nằm):
-    # Tự động xóa cảnh báo, tắt còi và sẵn sàng 100% cho các lần té ngã tiếp theo!
-    if current_posture not in lying_postures:
+    # Khi người dùng đứng dậy (thân đứng thẳng tuyệt đối, không còn nằm):
+    if current_posture == "đứng thẳng":
         if fall_state["alert"] or fall_state.get("dismissed", False):
-            print(f"✅ [TỰ ĐỘNG PHỤC HỒI] Người dùng đã đứng/ngồi dậy ({current_posture}). Reset trạng thái, sẵn sàng cho lần té ngã tiếp theo!")
+            print(f"✅ [TỰ ĐỘNG PHỤC HỒI] Người dùng đã đứng dậy ({current_posture}). Reset trạng thái, sẵn sàng cho lần té ngã tiếp theo!")
             fall_state["alert"] = False
             fall_state["dismissed"] = False
 
-    # 4. Nếu vừa có va chạm VÀ tư thế hiện tại là Nằm / Úp mặt xuống bàn
-    if time_since_impact <= FALL_MEMORY_WINDOW_SECONDS and (current_posture in lying_postures):
+    # 4. Tư thế té ngã: hoặc thuộc lying_postures, hoặc khi thân đổ gục (không phải đứng thẳng)
+    is_fallen = (current_posture in lying_postures) or (abs(last_ax) < 0.60 and current_posture != "đứng thẳng")
+
+    # Nếu vừa có va chạm VÀ tư thế hiện tại là Nằm / Đổ gục
+    if time_since_impact <= FALL_MEMORY_WINDOW_SECONDS and is_fallen:
         if not fall_state["alert"] and not fall_state.get("dismissed", False):
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             impact_val = recent_impact.get("impact_g", max_impact)

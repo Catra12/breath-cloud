@@ -839,6 +839,7 @@
         let sirenOsc = null;
         let sirenGain = null;
         let sirenInterval = null;
+        let lastSpeechAt = 0;
 
         function initAudio() {
             if (!audioCtx) {
@@ -850,14 +851,33 @@
             }
         }
 
-        function playSiren() {
+        function speakAlert(text) {
+            if (!('speechSynthesis' in window)) return;
+            const now = Date.now();
+            if (now - lastSpeechAt < 4500) return;
+            lastSpeechAt = now;
+            try {
+                window.speechSynthesis.cancel();
+                const utter = new SpeechSynthesisUtterance(text);
+                utter.lang = 'vi-VN';
+                utter.rate = 1.0;
+                utter.volume = 1.0;
+                window.speechSynthesis.speak(utter);
+            } catch (e) {}
+        }
+
+        async function playSiren() {
             if (!isAudioEnabled || isAlarmPlaying) return;
             initAudio();
+
+            if (audioCtx && audioCtx.state === 'suspended') {
+                try { await audioCtx.resume(); } catch (e) {}
+            }
 
             try {
                 isAlarmPlaying = true;
                 sirenGain = audioCtx.createGain();
-                sirenGain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                sirenGain.gain.setValueAtTime(0.35, audioCtx.currentTime);
                 sirenGain.connect(audioCtx.destination);
 
                 sirenOsc = audioCtx.createOscillator();
@@ -869,13 +889,20 @@
                 let high = true;
                 sirenInterval = setInterval(() => {
                     if (!isAlarmPlaying || !sirenOsc) return;
-                    const freq = high ? 660 : 960;
-                    sirenOsc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                    const freq = high ? 680 : 1050;
+                    if (audioCtx) {
+                        sirenOsc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                        if (sirenGain) {
+                            sirenGain.gain.setValueAtTime(high ? 0.35 : 0.2, audioCtx.currentTime);
+                        }
+                    }
                     high = !high;
-                }, 350);
+                }, 300);
             } catch (e) {
                 console.error("Audio error:", e);
             }
+
+            speakAlert("Cảnh báo khẩn cấp! Phát hiện có té ngã!");
         }
 
         function stopSiren() {
@@ -894,6 +921,9 @@
             if (sirenGain) {
                 try { sirenGain.disconnect(); } catch (e) {}
                 sirenGain = null;
+            }
+            if ('speechSynthesis' in window) {
+                try { window.speechSynthesis.cancel(); } catch (e) {}
             }
         }
 
@@ -921,7 +951,11 @@
             }
         }
 
-        window.addEventListener('click', () => { if (!audioCtx) initAudio(); }, { once: true });
+        ['click', 'touchstart', 'keydown'].forEach(evt => {
+            window.addEventListener(evt, () => {
+                initAudio();
+            }, { once: false, passive: true });
+        });
 
         /* ────────────────────────────────────────────────────
            CHART.JS SETUP
@@ -1138,13 +1172,14 @@
         ──────────────────────────────────────────────────── */
         async function triggerTestFall() {
             initAudio();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                try { await audioCtx.resume(); } catch (e) {}
+            }
             try {
-                const res = await fetch('/test_fall', { method: 'POST' });
-                const data = await res.json();
-                alert(data.message || 'Đã kích hoạt sự kiện té ngã!');
+                await fetch('/test_fall', { method: 'POST' });
                 updateData();
             } catch (e) {
-                alert('Lỗi kích hoạt test ngã: ' + e);
+                console.error('Lỗi kích hoạt test ngã: ' + e);
             }
         }
 
@@ -1156,10 +1191,13 @@
             try {
                 const r = await fetch('/api/email_config');
                 const d = await r.json();
-                document.getElementById('cfg-receiver').value = d.ALERT_RECEIVER_EMAIL || '';
-                document.getElementById('cfg-sender').value = d.EMAIL_SENDER || '';
+                document.getElementById('cfg-receiver').value = d.ALERT_RECEIVER_EMAIL || 'cuteo12042005@gmail.com';
+                document.getElementById('cfg-sender').value = d.EMAIL_SENDER || 'cuteo12042005@gmail.com';
                 document.getElementById('cfg-password').value = d.EMAIL_PASSWORD || '';
-            } catch (e) {}
+            } catch (e) {
+                document.getElementById('cfg-receiver').value = 'cuteo12042005@gmail.com';
+                document.getElementById('cfg-sender').value = 'cuteo12042005@gmail.com';
+            }
         }
 
         function closeEmailModal() {
