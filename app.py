@@ -206,21 +206,15 @@ def detect_posture(ax, ay, az):
     if ay <= -0.50 and abs(ax) < 0.45:
         return "nằm nghiêng phải"
 
-    # 5. NGỒI TỰA LƯNG: Lưng ngả sâu ra sau tựa vào ghế (như khi nghỉ ngơi thư giãn)
-    # Góc ngả từ ~16 độ trở lên (az >= 0.28g, ví dụ trong ảnh user ax=0.92, az=0.50 tương đương ~30 độ)
-    if az >= 0.28 and ax >= 0.35 and abs(ay) < 0.50:
+    # 5. NGỒI TỰA LƯNG: Lưng ngả ra sau tựa vào ghế
+    # Góc ngả từ ~10 độ trở lên (az >= 0.18g, ví dụ trong ảnh thực tế ax=0.92, az=0.50)
+    if az >= 0.18 and ax >= 0.35 and abs(ay) < 0.50:
         return "ngồi tựa lưng"
 
-    # 6. NGỒI THẲNG / NGỒI BÌNH THƯỜNG: Người ngồi trên ghế làm việc bình thường
-    # - Khi đưa chip đứng lên một chút (ngả nhẹ tự nhiên từ 3.5° đến 16°, az từ 0.06g đến 0.28g)
-    # - Hoặc khi ngồi làm việc hơi cúi nhẹ về bàn (-0.25g <= az < 0.06g và ax < 0.98g)
-    if (0.06 <= az < 0.28 and ax >= 0.50 and abs(ay) < 0.50) or \
-       (-0.25 <= az < 0.06 and 0.50 <= ax < 0.98 and abs(ay) < 0.45):
-        return "ngồi"
-
-    # 7. ĐỨNG THẲNG: Chỉ khi cơ thể đứng thẳng tự nhiên (|az| < 0.06g và ax >= 0.98g, sai số lệch < 3.5 độ)
-    if ax >= 0.98 and abs(az) < 0.06 and abs(ay) < 0.25:
-        return "đứng"
+    # 6. ĐỨNG THẲNG: Chip bắt buộc phải ở tư thế thẳng đứng
+    # Thân thẳng đứng: trọng lực chủ đạo trên trục X (ax >= 0.70g), lưng thẳng không ngửa (|az| < 0.18g, |ay| < 0.45g)
+    if ax >= 0.70 and -0.32 < az < 0.18 and abs(ay) < 0.45:
+        return "đứng thẳng"
 
     # Mặc định suy luận dựa trên trục có giá trị tuyệt đối lớn nhất
     abs_x, abs_y, abs_z = abs(ax), abs(ay), abs(az)
@@ -231,13 +225,11 @@ def detect_posture(ax, ay, az):
     elif abs_y > abs_x and abs_y > abs_z:
         return "nằm nghiêng trái" if ay > 0 else "nằm nghiêng phải"
     elif abs_x > abs_y and abs_x > abs_z:
-        if az >= 0.28:
+        if az >= 0.18:
             return "ngồi tựa lưng"
-        if ax >= 0.98 and abs(az) < 0.06:
-            return "đứng"
-        return "ngồi"
+        return "đứng thẳng"
 
-    return "ngồi"
+    return "đứng thẳng"
 
 # ==================================================
 # FALL DETECTION (PHÁT HIỆN TÉ NGÃ)
