@@ -747,7 +747,8 @@ def email_config():
             "EMAIL_SENDER": cfg.get("EMAIL_SENDER", ""),
             "EMAIL_PASSWORD": masked_pwd,
             "ALERT_RECEIVER_EMAIL": cfg.get("ALERT_RECEIVER_EMAIL", ""),
-            "ENABLE_EMAIL_ALERT": cfg.get("ENABLE_EMAIL_ALERT", "true")
+            "ENABLE_EMAIL_ALERT": cfg.get("ENABLE_EMAIL_ALERT", "true"),
+            "GOOGLE_SCRIPT_URL": cfg.get("GOOGLE_SCRIPT_URL", "")
         })
 
 

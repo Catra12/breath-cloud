@@ -822,6 +822,20 @@
                 </div>
             </div>
 
+            <!-- 3. Tùy chọn Google Apps Script Webhook cho Render Cloud Free -->
+            <div style="margin-top:14px; padding:12px; background:rgba(56, 189, 248, 0.05); border:1px dashed rgba(56, 189, 248, 0.25); border-radius:10px;">
+                <div style="font-size:0.75rem; color:#38bdf8; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
+                    <span>🌐</span> DÀNH RIÊNG CHO RENDER CLOUD (BỎ QUA CHẶN CỔNG SMTP)
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="color:#94a3b8; font-size:0.7rem;">Google Apps Script Webhook URL (HTTPS Port 443)</label>
+                    <input type="url" id="cfg-script-url" class="form-input" placeholder="https://script.google.com/macros/s/.../exec" />
+                    <div class="form-help" style="font-size:0.68rem; color:#94a3b8; margin-top:4px;">
+                        Render Free chặn cổng 587. Dán URL Webhook Google Script vào đây sẽ gửi mail qua cổng 443 HTTPS không bao giờ bị chặn! (Để trống nếu dùng Local).
+                    </div>
+                </div>
+            </div>
+
             <div class="modal-footer">
                 <button class="action-btn" onclick="testEmailConnection()">✉️ Gửi Thử Email Tới Người Nhận</button>
                 <button class="action-btn active" onclick="saveEmailConfig()">💾 Lưu Cài Đặt</button>
@@ -1194,6 +1208,8 @@
                 document.getElementById('cfg-receiver').value = d.ALERT_RECEIVER_EMAIL || 'cuteo12042005@gmail.com';
                 document.getElementById('cfg-sender').value = d.EMAIL_SENDER || 'cuteo12042005@gmail.com';
                 document.getElementById('cfg-password').value = d.EMAIL_PASSWORD || '';
+                const scriptEl = document.getElementById('cfg-script-url');
+                if (scriptEl) scriptEl.value = d.GOOGLE_SCRIPT_URL || '';
             } catch (e) {
                 document.getElementById('cfg-receiver').value = 'cuteo12042005@gmail.com';
                 document.getElementById('cfg-sender').value = 'cuteo12042005@gmail.com';
@@ -1213,6 +1229,8 @@
             const receiver = document.getElementById('cfg-receiver').value.trim();
             const sender = document.getElementById('cfg-sender').value.trim();
             const password = document.getElementById('cfg-password').value.trim();
+            const scriptEl = document.getElementById('cfg-script-url');
+            const scriptUrl = scriptEl ? scriptEl.value.trim() : '';
 
             if (!receiver) {
                 alert('Vui lòng nhập Email người nhận cảnh báo (Ví dụ: cuteo12042005@gmail.com)!');
@@ -1226,6 +1244,7 @@
                 };
                 if (sender) payload.EMAIL_SENDER = sender;
                 if (password && !password.includes('*')) payload.EMAIL_PASSWORD = password;
+                if (scriptUrl !== undefined) payload.GOOGLE_SCRIPT_URL = scriptUrl;
 
                 const r = await fetch('/api/email_config', {
                     method: 'POST',
@@ -1245,14 +1264,16 @@
             const receiver = document.getElementById('cfg-receiver').value.trim();
             const sender = document.getElementById('cfg-sender').value.trim();
             const password = document.getElementById('cfg-password').value.trim();
+            const scriptEl = document.getElementById('cfg-script-url');
+            const scriptUrl = scriptEl ? scriptEl.value.trim() : '';
 
             if (!receiver) {
                 alert('Vui lòng nhập Email người nhận cảnh báo!');
                 return;
             }
 
-            if (!sender || !password) {
-                alert('⚠️ CHƯA CÓ GMAIL GỬI HOẶC MẬT KHẨU ỨNG DỤNG!\n\nĐể Google cho phép gửi email đến ' + receiver + ', bạn bắt buộc phải nhập:\n1. Gmail người gửi\n2. Mật khẩu ứng dụng 16 ký tự của Google.\n\n(Bạn có thể điền chính ' + receiver + ' vào ô Gmail người gửi, và lấy mật khẩu 16 chữ cái tại myaccount.google.com/apppasswords).');
+            if (!scriptUrl && (!sender || !password)) {
+                alert('⚠️ CHƯA CÓ THÔNG TIN GỬI EMAIL!\n\n1. Nếu chạy Local: Bạn cần nhập Gmail người gửi + Mật khẩu ứng dụng 16 ký tự.\n2. Nếu chạy trên Render Cloud: Bạn dán Google Apps Script Webhook URL (cổng 443 HTTPS không bị chặn).');
                 return;
             }
 
@@ -1264,6 +1285,7 @@
                     ENABLE_EMAIL_ALERT: 'true'
                 };
                 if (!password.includes('*')) payload.EMAIL_PASSWORD = password;
+                if (scriptUrl !== undefined) payload.GOOGLE_SCRIPT_URL = scriptUrl;
 
                 await fetch('/api/email_config', {
                     method: 'POST',
@@ -1271,7 +1293,7 @@
                     body: JSON.stringify(payload)
                 });
 
-                document.getElementById('footer-status').textContent = 'Đang kết nối SMTP Google để gửi email xác thực...';
+                document.getElementById('footer-status').textContent = 'Đang tiến hành gửi email xác thực...';
 
                 const r = await fetch('/api/test_email', { method: 'POST' });
                 const d = await r.json();
