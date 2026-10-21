@@ -16,6 +16,7 @@ from flask import Flask, jsonify, request, render_template
 from email_service import (
     send_fall_alert_email,
     send_test_email,
+    test_email_connection_sync,
     load_env_vars,
     save_env_vars
 )
@@ -188,36 +189,35 @@ def detect_posture(ax, ay, az):
         ax, ay, az = ax / 16384.0, ay / 16384.0, az / 16384.0
 
     # 1. NẰM ÚP MẶT XUỐNG BÀN (Gục đầu / ngực úp xuống mặt bàn làm việc)
-    # Đặc điểm: Thân trên gập về phía trước tì lên bàn ngang, ngực hướng xuống đất (az âm),
-    # nhưng thân vẫn có độ nghiêng do ngồi tại ghế (ax trong khoảng 0.12 - 0.65g)
-    if az <= -0.40 and 0.12 <= ax <= 0.65 and abs(ay) < 0.55:
+    if az <= -0.35 and 0.15 <= ax <= 0.70 and abs(ay) < 0.50:
         return "úp mặt xuống bàn"
 
     # 2. NẰM NGỬA: Ngực hướng thẳng lên trời (trục Z dương lớn)
-    if az >= 0.65 and abs(ax) < 0.50 and abs(ay) < 0.50:
+    if az >= 0.65 and abs(ax) < 0.45 and abs(ay) < 0.50:
         return "nằm ngửa"
 
-    # 3. NẰM ÚP: Nằm phẳng trên giường, ngực ép xuống mặt phẳng (trục Z âm lớn, thân phẳng ngang ax nhỏ)
-    if az <= -0.65 and abs(ax) < 0.38 and abs(ay) < 0.50:
+    # 3. NẰM ÚP: Nằm phẳng trên giường, ngực ép xuống mặt phẳng (trục Z âm lớn)
+    if az <= -0.65 and abs(ax) < 0.35 and abs(ay) < 0.50:
         return "nằm úp"
 
-    # 4. NẰM NGHIÊNG TRÁI / PHẢI: Trọng lực dồn sang trục Y (Đã đảo chiều theo cảm biến thực tế)
-    if ay >= 0.55 and abs(ax) < 0.50:
+    # 4. NẰM NGHIÊNG TRÁI / PHẢI: Trọng lực dồn sang trục Y (Đã đảo chiều theo thực tế)
+    if ay >= 0.55 and abs(ax) < 0.45:
         return "nằm nghiêng trái"
-    if ay <= -0.55 and abs(ax) < 0.50:
+    if ay <= -0.55 and abs(ax) < 0.45:
         return "nằm nghiêng phải"
 
-    # 5. ĐỨNG THẲNG: Trọng lực dồn dọc theo thân người (trục X)
-    if ax >= 0.78 and abs(az) < 0.45 and abs(ay) < 0.40:
-        return "đứng"
-
-    # 6. NGỒI TỰA LƯNG: Ngồi ngả về phía sau
-    if 0.35 <= ax <= 0.72 and az >= 0.38 and abs(ay) < 0.45:
+    # 5. NGỒI TỰA LƯNG: Lưng ngả ra sau tựa vào ghế (Trục Z dương do ngực hơi ngửa lên)
+    # Dải thực tế khi tựa ghế: az từ 0.15g đến 0.60g, ax từ 0.50g đến 0.95g
+    if az >= 0.15 and 0.50 <= ax <= 0.95 and abs(ay) < 0.45:
         return "ngồi tựa lưng"
 
-    # 7. NGỒI THẲNG:
-    if ax >= 0.52 and abs(az) < 0.50 and abs(ay) < 0.50:
+    # 6. NGỒI THẲNG: Ngồi làm việc trên ghế (ax dao động 0.60g đến 0.94g)
+    if 0.60 <= ax <= 0.94 and -0.25 <= az < 0.15 and abs(ay) < 0.45:
         return "ngồi"
+
+    # 7. ĐỨNG THẲNG: Chỉ khi cơ thể đứng thẳng tuyệt đối (ax >= 0.95g, az gần 0)
+    if ax >= 0.95 and abs(az) < 0.15 and abs(ay) < 0.30:
+        return "đứng"
 
     # Mặc định suy luận dựa trên trục có giá trị tuyệt đối lớn nhất
     abs_x, abs_y, abs_z = abs(ax), abs(ay), abs(az)
@@ -228,7 +228,7 @@ def detect_posture(ax, ay, az):
     elif abs_y > abs_x and abs_y > abs_z:
         return "nằm nghiêng trái" if ay > 0 else "nằm nghiêng phải"
     elif abs_x > abs_y and abs_x > abs_z:
-        return "đứng" if ax > 0.75 else "ngồi"
+        return "đứng" if ax > 0.94 else "ngồi"
 
     return "ngồi"
 
@@ -726,12 +726,10 @@ def email_config():
 
 @app.route("/api/test_email", methods=["POST"])
 def test_email_api():
-    def on_test_done(success, msg):
-        pass
-    send_test_email(callback=on_test_done)
+    ok, msg = test_email_connection_sync()
     return jsonify({
-        "success": True,
-        "message": "Đang gửi email thử nghiệm. Vui lòng kiểm tra hộp thư đến!"
+        "success": ok,
+        "message": msg
     })
 
 

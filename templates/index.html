@@ -781,36 +781,43 @@
 
     </div><!-- /.app -->
 
-    <!-- ── MODAL CẤU HÌNH EMAIL NGƯỜI NHẬN GỌN GÀNG ─── -->
+    <!-- ── MODAL CẤU HÌNH EMAIL GỬI & NHẬN BÁO ĐỘNG ─── -->
     <div class="modal-overlay" id="email-modal">
-        <div class="modal-box">
+        <div class="modal-box" style="max-width: 540px;">
             <div class="modal-header">
-                <h3>📧 Cài Đặt Email Nhận Cảnh Báo Té Ngã</h3>
+                <h3>📧 Cài Đặt Gửi Email Cảnh Báo Té Ngã</h3>
                 <button class="modal-close" onclick="closeEmailModal()">×</button>
             </div>
 
+            <!-- 1. Email người nhận -->
             <div class="form-group">
-                <label>Email Người Nhận Cảnh Báo (Khẩn Cấp)</label>
-                <input type="email" id="cfg-receiver" class="form-input" placeholder="nhap_email_cua_ban@gmail.com" />
+                <label style="color:#38bdf8; font-weight:700;">1. Email Người Nhận Cảnh Báo (Khẩn Cấp)</label>
+                <input type="email" id="cfg-receiver" class="form-input" placeholder="cuteo12042005@gmail.com" />
                 <div class="form-help">
-                    Khi con chip phát hiện va đập té ngã, hệ thống sẽ lập tức gửi email thông báo chi tiết đến hòm thư này.
+                    Hòm thư sẽ nhận thông báo khi có sự cố té ngã (ví dụ: cuteo12042005@gmail.com).
                 </div>
             </div>
 
-            <span class="advanced-toggle" onclick="toggleAdvancedEmail()">
-                ⚙️ Cấu hình tài khoản gửi (Google App Password) ▼
-            </span>
-
-            <div class="advanced-fields" id="advanced-fields">
-                <div class="form-group">
-                    <label>Gmail Người Gửi (EMAIL_SENDER)</label>
-                    <input type="email" id="cfg-sender" class="form-input" placeholder="gmail_gui_di@gmail.com" />
+            <!-- 2. Tài khoản Gmail phát thư -->
+            <div style="margin-top:16px; padding:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px;">
+                <div style="font-size:0.76rem; color:#fbbf24; font-weight:700; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
+                    <span>🔑</span> CẤU HÌNH TÀI KHOẢN GMAIL GỬI THƯ (BẮT BUỘC)
                 </div>
+
                 <div class="form-group">
-                    <label>Mật Khẩu Ứng Dụng Google (16 Chữ Cái)</label>
-                    <input type="password" id="cfg-password" class="form-input" placeholder="16 chữ cái từ Google App Passwords" />
+                    <label>2. Gmail Người Gửi (EMAIL_SENDER)</label>
+                    <input type="email" id="cfg-sender" class="form-input" placeholder="ten_cua_ban@gmail.com" />
                     <div class="form-help">
-                        Lấy tại: <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#60a5fa;">myaccount.google.com/apppasswords</a>
+                        Bạn có thể dùng chính Gmail của mình (ví dụ cuteo12042005@gmail.com) để tự phát thư.
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>3. Mật Khẩu Ứng Dụng Google (16 Chữ Cái)</label>
+                    <input type="password" id="cfg-password" class="form-input" placeholder="Nhập 16 chữ cái (không phải mật khẩu đăng nhập)" />
+                    <div class="form-help" style="color:#93c5fd; margin-top:6px;">
+                        Google bắt buộc dùng Mật khẩu ứng dụng. Lấy tại:<br>
+                        👉 <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#60a5fa; font-weight:bold; text-decoration:underline;">myaccount.google.com/apppasswords</a> (Yêu cầu đã bật Xác thực 2 bước).
                     </div>
                 </div>
             </div>
@@ -1170,7 +1177,7 @@
             const password = document.getElementById('cfg-password').value.trim();
 
             if (!receiver) {
-                alert('Vui lòng nhập Email người nhận cảnh báo!');
+                alert('Vui lòng nhập Email người nhận cảnh báo (Ví dụ: cuteo12042005@gmail.com)!');
                 return;
             }
 
@@ -1188,7 +1195,7 @@
                     body: JSON.stringify(payload)
                 });
                 const d = await r.json();
-                alert(d.message || 'Lưu cài đặt email người nhận thành công!');
+                alert(d.message || 'Lưu cài đặt email thành công!');
                 document.getElementById('email-receiver-val').textContent = receiver;
                 closeEmailModal();
             } catch (e) {
@@ -1198,22 +1205,45 @@
 
         async function testEmailConnection() {
             const receiver = document.getElementById('cfg-receiver').value.trim();
+            const sender = document.getElementById('cfg-sender').value.trim();
+            const password = document.getElementById('cfg-password').value.trim();
+
             if (!receiver) {
-                alert('Vui lòng nhập email người nhận trước khi gửi thử!');
+                alert('Vui lòng nhập Email người nhận cảnh báo!');
                 return;
             }
+
+            if (!sender || !password) {
+                alert('⚠️ CHƯA CÓ GMAIL GỬI HOẶC MẬT KHẨU ỨNG DỤNG!\n\nĐể Google cho phép gửi email đến ' + receiver + ', bạn bắt buộc phải nhập:\n1. Gmail người gửi\n2. Mật khẩu ứng dụng 16 ký tự của Google.\n\n(Bạn có thể điền chính ' + receiver + ' vào ô Gmail người gửi, và lấy mật khẩu 16 chữ cái tại myaccount.google.com/apppasswords).');
+                return;
+            }
+
             try {
-                // Tự động lưu trước khi gửi test
+                // Tự động lưu cấu hình trước khi gửi test
+                const payload = {
+                    ALERT_RECEIVER_EMAIL: receiver,
+                    EMAIL_SENDER: sender,
+                    ENABLE_EMAIL_ALERT: 'true'
+                };
+                if (!password.includes('*')) payload.EMAIL_PASSWORD = password;
+
                 await fetch('/api/email_config', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ALERT_RECEIVER_EMAIL: receiver })
+                    body: JSON.stringify(payload)
                 });
+
+                document.getElementById('footer-status').textContent = 'Đang kết nối SMTP Google để gửi email xác thực...';
+
                 const r = await fetch('/api/test_email', { method: 'POST' });
                 const d = await r.json();
-                alert(d.message || `Đang gửi email thử nghiệm tới ${receiver}. Vui lòng kiểm tra hộp thư!`);
+
+                alert(d.message);
+                if (d.success) {
+                    document.getElementById('email-receiver-val').textContent = receiver;
+                }
             } catch (e) {
-                alert('Lỗi gửi email test: ' + e);
+                alert('Lỗi kết nối kiểm tra: ' + e);
             }
         }
     </script>

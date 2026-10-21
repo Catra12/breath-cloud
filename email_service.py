@@ -185,7 +185,7 @@ def send_fall_alert_email(fall_info, callback=None):
 
 def send_test_email(callback=None):
     """
-    Gửi email thử nghiệm cấu hình.
+    Gửi email thử nghiệm cấu hình qua luồng ngầm.
     """
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     subject = f"✅ [KIỂM TRA HỆ THỐNG] Kiểm tra kết nối Email Breath AI ({now})"
@@ -213,3 +213,68 @@ def send_test_email(callback=None):
     )
     t.start()
     return t
+
+
+def test_email_connection_sync():
+    """
+    Kiểm tra kết nối gửi email đồng bộ để phản hồi ngay lập tức cho giao diện người dùng.
+    """
+    config = load_env_vars()
+    sender = config.get("EMAIL_SENDER", "").strip()
+    password = config.get("EMAIL_PASSWORD", "").strip()
+    receiver = config.get("ALERT_RECEIVER_EMAIL", "").strip()
+    smtp_server = config.get("SMTP_SERVER", "smtp.gmail.com").strip()
+    smtp_port = int(config.get("SMTP_PORT", 587))
+
+    if not receiver:
+        return False, "Vui lòng nhập Email người nhận cảnh báo (ALERT_RECEIVER_EMAIL)!"
+
+    if not sender:
+        return False, "Chưa điền Gmail người gửi (EMAIL_SENDER)! Để gửi được email đến người nhận, bạn cần nhập tài khoản Gmail gửi."
+
+    if not password:
+        return False, "Chưa điền Mật khẩu ứng dụng Google (16 chữ cái)! Google không cho phép dùng mật khẩu đăng nhập thông thường, bạn cần tạo Mật khẩu ứng dụng tại myaccount.google.com/apppasswords."
+
+    try:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"✅ [THỬ NGHIỆM THÀNH CÔNG] Kết nối hệ thống Breath AI ({now})"
+        msg["From"] = f"Breath AI Alert System <{sender}>"
+        msg["To"] = receiver
+
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; background:#0f172a; color:#f8fafc; padding:25px; border-radius:10px;">
+            <h2 style="color:#10b981;">🎉 KẾT NỐI EMAIL THÀNH CÔNG!</h2>
+            <p>Xin chào! Hệ thống <b>Breath AI Cloud</b> đã gửi thư thử nghiệm thành công tới hòm thư <b>{receiver}</b>.</p>
+            <p>Từ bây giờ, khi cảm biến phát hiện sự cố té ngã bất thường, cảnh báo khẩn cấp sẽ lập tức được gửi đến hòm thư này.</p>
+            <p style="color:#94a3b8; font-size:12px;">Thời gian xác thực: {now}</p>
+        </div>
+        """
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        print(f"[Email Test] Đang kết nối tới {smtp_server}:{smtp_port} bằng {sender}...")
+        server = smtplib.SMTP(smtp_server, smtp_port, timeout=12)
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(sender, password)
+        server.sendmail(sender, [receiver], msg.as_string())
+        server.quit()
+
+        print(f"[Email Test] ✅ Đã gửi thư thử nghiệm thành công tới {receiver}!")
+        return True, f"✅ ĐÃ GỬI THÀNH CÔNG! Vui lòng mở hộp thư đến (hoặc hòm thư Spam) của {receiver} để xem email xác nhận!"
+
+    except smtplib.SMTPAuthenticationError as e:
+        err_msg = (
+            "❌ Lỗi xác thực tài khoản Google (535 Authentication Failed)!\n"
+            "Nguyên nhân: Mật khẩu ứng dụng 16 ký tự của bạn chưa đúng hoặc tài khoản chưa bật Xác thực 2 bước.\n"
+            "Cách xử lý: Vào myaccount.google.com/apppasswords để tạo lại chuỗi 16 chữ cái mới và dán vào ô Mật khẩu ứng dụng."
+        )
+        print(f"[Email Test] ❌ {err_msg}")
+        return False, err_msg
+
+    except Exception as e:
+        err_msg = f"❌ Không thể gửi email qua Gmail: {type(e).__name__}: {e}"
+        print(f"[Email Test] ❌ {err_msg}")
+        return False, err_msg
+
