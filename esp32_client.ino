@@ -46,7 +46,7 @@ const int           BATCH_SIZE         = 5;      // Gửi mỗi 5 mẫu (200ms/l
 const int           HTTP_TIMEOUT_MS    = 6000;   // Timeout 6 giây
 const int           RETRY_COUNT        = 2;      // Số lần retry
 const int           RETRY_DELAY_MS     = 1000;   // Chờ 1s giữa các lần retry
-const float         FALL_THRESHOLD_G   = 1.35f;  // Ngưỡng va đập cực nhạy cho thử nghiệm thực tế (g)
+const float         FALL_THRESHOLD_G   = 1.80f;  // Ngưỡng va đập thực tế (g) - chống báo bậy khi chạm nhẹ
 
 // =============================================
 // BUFFER & BIẾN ĐỒNG BỘ DUAL-CORE
@@ -102,18 +102,22 @@ void samplingTask(void * pvParameters) {
         float gy = (gy_r / 131.0f) * (PI / 180.0f);
         float gz = (gz_r / 131.0f) * (PI / 180.0f);
 
-        // Tính lực gia tốc toàn phần SVM
+        // Tính lực gia tốc toàn phần SVM & vận tốc góc
         float svm = sqrt(ax * ax + ay * ay + az * az);
+        float gyro_mag = sqrt(gx * gx + gy * gy + gz * gz);
 
         // Bắt đỉnh va đập tức thì
         if (svm > max_impact_seen) {
             max_impact_seen = svm;
         }
 
-        // Bắt sự kiện va chạm hoặc rơi tự do
-        if (svm >= FALL_THRESHOLD_G || svm <= 0.65f) {
+        // Bắt sự kiện va chạm thật sự (tránh nhầm khi chỉ chạm tay nhẹ vào vỏ chip):
+        // 1. Va đập mạnh (SVM >= 1.80g khi rơi)
+        // 2. Va đập vừa kèm xoay người dữ dội (SVM >= 1.60g và Gyro >= 2.0 rad/s)
+        // 3. Rơi tự do không trọng lượng thực sự (SVM <= 0.40g)
+        if (svm >= FALL_THRESHOLD_G || (svm >= 1.60f && gyro_mag >= 2.0f) || svm <= 0.40f) {
             latched_impact = true;
-            Serial.printf("⚡ [CORE 0 BẮT VA ĐẬP] SVM=%.2fg!\n", svm);
+            Serial.printf("⚡ [CORE 0 BẮT VA ĐẬP] SVM=%.2fg (Gyro=%.2f rad/s)\n", svm, gyro_mag);
         }
 
         portENTER_CRITICAL(&mux);
