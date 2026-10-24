@@ -5,847 +5,912 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description"
-        content="Real-time AI breathing rate, posture detection, and fall alert dashboard powered by TFLite classification." />
-    <title>Breath AI Cloud — Real-time ESP32 Monitor</title>
+        content="Hệ thống giám sát hô hấp thời gian thực và phát hiện té ngã thông minh - Giao diện sức khỏe cao cấp." />
+    <title>Respira — Giám Sát Hô Hấp & An Toàn ESP32</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
     <style>
         :root {
-            --bg-primary: #060c18;
-            --bg-secondary: #0d1526;
-            --glass-bg: rgba(15, 25, 50, 0.75);
-            --glass-border: rgba(255, 255, 255, 0.08);
-            --glass-highlight: rgba(255, 255, 255, 0.03);
-            --text-primary: #f0f4ff;
-            --text-secondary: #7a8fb5;
-            --text-muted: #3d5080;
-            --green: #10e68a;
-            --green-dim: rgba(16, 230, 138, 0.12);
-            --green-glow: rgba(16, 230, 138, 0.35);
-            --blue: #4f8fff;
-            --blue-dim: rgba(79, 143, 255, 0.12);
-            --blue-glow: rgba(79, 143, 255, 0.3);
-            --purple: #a78bfa;
-            --yellow: #fbbf24;
-            --orange: #f97316;
-            --red: #ef4444;
-            --red-dim: rgba(239, 68, 68, 0.18);
-            --red-glow: rgba(239, 68, 68, 0.45);
-            --radius-lg: 20px;
-            --radius-md: 14px;
-            --radius-sm: 10px;
-            --shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
-            --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            /* Palette: Apple Health / Oura Ring Dark Mode */
+            --bg-base: #070b14;
+            --bg-surface: #0d1322;
+            --bg-card: #121a2d;
+            --bg-card-hover: #162138;
+            --bg-subtle: rgba(255, 255, 255, 0.03);
+            
+            --border-subtle: rgba(255, 255, 255, 0.07);
+            --border-hover: rgba(255, 255, 255, 0.16);
+            --border-focus: #3b82f6;
+
+            --text-heading: #f8fafc;
+            --text-body: #94a3b8;
+            --text-muted: #64748b;
+            --text-dark: #334155;
+
+            /* Health Accents */
+            --emerald: #10b981;
+            --emerald-subtle: rgba(16, 185, 129, 0.12);
+            --emerald-border: rgba(16, 185, 129, 0.25);
+            
+            --blue: #3b82f6;
+            --blue-subtle: rgba(59, 130, 246, 0.12);
+            --blue-border: rgba(59, 130, 246, 0.25);
+
+            --amber: #f59e0b;
+            --amber-subtle: rgba(245, 158, 11, 0.12);
+            --amber-border: rgba(245, 158, 11, 0.25);
+
+            --rose: #f43f5e;
+            --rose-subtle: rgba(244, 63, 94, 0.15);
+            --rose-border: rgba(244, 63, 94, 0.35);
+
+            --radius-xl: 18px;
+            --radius-lg: 14px;
+            --radius-md: 10px;
+            --radius-sm: 6px;
+
+            --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        *,
-        *::before,
-        *::after {
+        *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
 
         body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background: var(--bg-primary);
-            background-image:
-                radial-gradient(ellipse 80% 50% at 20% 10%, rgba(79, 143, 255, 0.08) 0%, transparent 60%),
-                radial-gradient(ellipse 60% 40% at 80% 90%, rgba(16, 230, 138, 0.06) 0%, transparent 55%);
+            font-family: var(--font-sans);
+            background-color: var(--bg-base);
+            color: var(--text-body);
             min-height: 100vh;
-            color: var(--text-primary);
-            padding: 20px;
+            padding: 24px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
         }
 
-        .app {
-            max-width: 1120px;
+        .container {
+            max-width: 1140px;
             margin: 0 auto;
             display: flex;
             flex-direction: column;
             gap: 20px;
         }
 
-        /* ─── HEADER ─────────────────────────────────── */
-        .header {
+        /* ─── APP HEADER ────────────────────────────────────── */
+        .app-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             flex-wrap: wrap;
-            gap: 12px;
-            padding: 22px 28px;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-lg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
+            gap: 16px;
+            padding: 18px 24px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
         }
 
-        .header-brand {
+        .brand-section {
             display: flex;
             align-items: center;
             gap: 14px;
         }
 
-        .logo-ring {
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--green), var(--blue));
+        .brand-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, #1e293b, #0f172a);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 0 18px var(--green-glow);
+            color: var(--emerald);
             flex-shrink: 0;
         }
 
-        .logo-ring svg {
-            width: 22px;
-            height: 22px;
-            fill: #fff;
+        .brand-title h1 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: -0.02em;
         }
 
-        .brand-text h1 {
-            font-size: 1.25rem;
-            font-weight: 800;
-            background: linear-gradient(90deg, var(--green), var(--blue));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            letter-spacing: -0.03em;
-        }
-
-        .brand-text p {
+        .brand-title p {
             font-size: 0.75rem;
-            color: var(--text-secondary);
+            color: var(--text-muted);
             font-weight: 500;
-            margin-top: 1px;
         }
 
-        .header-status {
+        .header-controls {
             display: flex;
             align-items: center;
             gap: 10px;
             flex-wrap: wrap;
         }
 
-        .badge {
+        /* Minimalist Pill Badges */
+        .pill-badge {
             display: inline-flex;
             align-items: center;
             gap: 6px;
             padding: 6px 12px;
-            border-radius: 99px;
-            font-size: 0.7rem;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            border: 1px solid transparent;
+            border-radius: 9999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-body);
         }
 
-        .badge-live {
-            background: rgba(239, 68, 68, 0.15);
-            color: #ff6b6b;
-            border-color: rgba(239, 68, 68, 0.3);
+        .pill-badge.live {
+            background: var(--emerald-subtle);
+            border-color: var(--emerald-border);
+            color: var(--emerald);
         }
 
-        .badge-green {
-            background: var(--green-dim);
-            color: var(--green);
-            border-color: rgba(16, 230, 138, 0.25);
-        }
-
-        .badge-blue {
-            background: var(--blue-dim);
-            color: var(--blue);
-            border-color: rgba(79, 143, 255, 0.25);
-        }
-
-        .dot {
-            width: 6px;
-            height: 6px;
+        .pill-badge.active-indicator {
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
+            background: var(--emerald);
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+        }
+
+        .btn-minimal {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 13px;
+            border-radius: var(--radius-md);
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-body);
+            font-size: 0.76rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .btn-minimal:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-hover);
+            color: var(--text-heading);
+        }
+
+        .btn-minimal.active {
+            background: var(--emerald-subtle);
+            border-color: var(--emerald-border);
+            color: var(--emerald);
+        }
+
+        .btn-minimal.danger-test {
+            color: var(--rose);
+            border-color: var(--rose-border);
+            background: var(--rose-subtle);
+        }
+
+        .btn-minimal.danger-test:hover {
+            background: rgba(244, 63, 94, 0.25);
+        }
+
+        /* ─── EMERGENCY CLINICAL FALL BANNER ─────────────────── */
+        .fall-banner {
+            display: none;
+            background: linear-gradient(135deg, rgba(244, 63, 94, 0.16), rgba(159, 18, 57, 0.16));
+            border: 1px solid var(--rose);
+            border-radius: var(--radius-xl);
+            padding: 18px 24px;
+            animation: softPulse 2s infinite ease-in-out;
+        }
+
+        @keyframes softPulse {
+            0%, 100% { border-color: rgba(244, 63, 94, 0.5); }
+            50% { border-color: rgba(244, 63, 94, 0.9); }
+        }
+
+        .fall-banner-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .fall-banner-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .fall-alert-icon-box {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: rgba(244, 63, 94, 0.2);
+            color: var(--rose);
+            display: flex;
+            align-items: center;
+            justify-content: center;
             flex-shrink: 0;
         }
 
-        .dot-pulse {
-            background: #ef4444;
-            animation: dot-pulse 1.4s ease infinite;
-            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+        .fall-banner-title h2 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: -0.01em;
         }
 
-        @keyframes dot-pulse {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
-            70% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        .fall-banner-title p {
+            font-size: 0.8rem;
+            color: #fecdd3;
+            margin-top: 2px;
         }
 
-        /* ─── EMERGENCY FALL BANNER ──────────────────── */
-        .fall-alert-banner {
-            display: none;
-            position: relative;
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.35));
-            border: 2px solid var(--red);
-            border-radius: var(--radius-lg);
-            padding: 22px 26px;
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            box-shadow: 0 0 45px var(--red-glow);
-            animation: alert-flash 1.2s ease-in-out infinite alternate;
+        .fall-banner-title b {
+            color: #fff;
         }
 
-        @keyframes alert-flash {
-            0% { border-color: rgba(239, 68, 68, 0.7); box-shadow: 0 0 25px rgba(239, 68, 68, 0.3); }
-            100% { border-color: #ff4d4d; box-shadow: 0 0 55px rgba(239, 68, 68, 0.7); }
-        }
-
-        .fall-content {
-            display: flex;
+        .btn-resolve-fall {
+            background: var(--rose);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: var(--radius-md);
+            font-size: 0.82rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
             align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .btn-resolve-fall:hover {
+            background: #e11d48;
+            transform: translateY(-1px);
+        }
+
+        /* ─── PRIMARY VITALS CARDS (OURA / APPLE HEALTH STYLE) ─ */
+        .vitals-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
             gap: 16px;
         }
 
-        .fall-info {
+        .vital-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            padding: 24px;
             display: flex;
-            align-items: center;
-            gap: 18px;
-        }
-
-        .fall-siren-icon {
-            font-size: 2.4rem;
-            animation: siren-wobble 0.8s ease infinite alternate;
-        }
-
-        @keyframes siren-wobble {
-            0% { transform: scale(1) rotate(-8deg); }
-            100% { transform: scale(1.15) rotate(8deg); }
-        }
-
-        .fall-text h2 {
-            font-size: 1.25rem;
-            font-weight: 800;
-            color: #ff6b6b;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .fall-text p {
-            font-size: 0.82rem;
-            color: #fecaca;
-            margin-top: 4px;
-        }
-
-        .fall-actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-
-        .btn-dismiss {
-            background: linear-gradient(135deg, #ef4444, #b91c1c);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 99px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+            flex-direction: column;
+            justify-content: space-between;
             transition: var(--transition);
+            position: relative;
+        }
+
+        .vital-card:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-card);
+        }
+
+        .vital-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .vital-tag {
             display: flex;
             align-items: center;
             gap: 8px;
-        }
-
-        .btn-dismiss:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.6);
-        }
-
-        /* ─── QUICK ACTIONS ROW ──────────────────────── */
-        .actions-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 12px;
-            padding: 14px 20px;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-md);
-        }
-
-        .actions-left, .actions-right {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .action-btn {
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid var(--glass-border);
-            color: var(--text-primary);
-            padding: 9px 18px;
-            border-radius: var(--radius-sm);
-            font-size: 0.78rem;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            transition: var(--transition);
-        }
-
-        .action-btn:hover {
-            background: rgba(255, 255, 255, 0.12);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-
-        .action-btn.active {
-            background: var(--green-dim);
-            color: var(--green);
-            border-color: rgba(16, 230, 138, 0.4);
-        }
-
-        .action-btn.danger {
-            background: var(--red-dim);
-            color: #fca5a5;
-            border-color: rgba(239, 68, 68, 0.35);
-        }
-
-        .action-btn.danger:hover {
-            background: rgba(239, 68, 68, 0.3);
-            border-color: var(--red);
-        }
-
-        /* ─── HERO METRICS ───────────────────────────── */
-        .hero {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-
-        .metric-card {
-            position: relative;
-            padding: 26px 24px;
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-lg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            overflow: hidden;
-            transition: border-color var(--transition), box-shadow var(--transition);
-        }
-
-        .metric-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: var(--glass-highlight);
-            pointer-events: none;
-        }
-
-        .metric-card.bpm-card {
-            border-color: rgba(16, 230, 138, 0.2);
-        }
-
-        .metric-card.bpm-card:hover {
-            border-color: rgba(16, 230, 138, 0.4);
-            box-shadow: 0 0 35px var(--green-dim);
-        }
-
-        .metric-card.posture-card {
-            border-color: rgba(79, 143, 255, 0.25);
-        }
-
-        .metric-card.posture-card:hover {
-            border-color: rgba(79, 143, 255, 0.45);
-            box-shadow: 0 0 35px var(--blue-dim);
-        }
-
-        .metric-glow {
-            position: absolute;
-            width: 170px;
-            height: 170px;
-            border-radius: 50%;
-            filter: blur(55px);
-            opacity: 0.25;
-            pointer-events: none;
-            right: -40px;
-            bottom: -40px;
-        }
-
-        .bpm-card .metric-glow { background: var(--green); }
-        .posture-card .metric-glow { background: var(--blue); }
-
-        .metric-label {
-            font-size: 0.7rem;
+            font-size: 0.72rem;
             font-weight: 700;
-            letter-spacing: 0.12em;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
-            color: var(--text-secondary);
+            color: var(--text-muted);
+        }
+
+        .vital-tag svg {
+            width: 15px;
+            height: 15px;
+            color: var(--text-muted);
+        }
+
+        .status-chip {
+            font-size: 0.68rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: var(--emerald-subtle);
+            color: var(--emerald);
+            border: 1px solid var(--emerald-border);
+        }
+
+        .status-chip.amber {
+            background: var(--amber-subtle);
+            color: var(--amber);
+            border-color: var(--amber-border);
+        }
+
+        .status-chip.blue {
+            background: var(--blue-subtle);
+            color: var(--blue);
+            border-color: var(--blue-border);
+        }
+
+        .vital-main-value {
             display: flex;
-            align-items: center;
+            align-items: baseline;
             gap: 8px;
             margin-bottom: 12px;
         }
 
-        .metric-value {
+        .value-large {
             font-size: 3.2rem;
             font-weight: 800;
-            letter-spacing: -0.04em;
+            color: var(--text-heading);
             line-height: 1;
-            transition: color var(--transition);
+            letter-spacing: -0.03em;
         }
 
-        .bpm-card .metric-value {
-            color: var(--green);
-            text-shadow: 0 0 30px var(--green-glow);
+        .value-unit {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 600;
         }
 
-        .posture-card .metric-value {
-            font-size: 2.2rem;
-            color: var(--blue);
-            text-shadow: 0 0 30px var(--blue-glow);
-            text-transform: uppercase;
+        .posture-display {
+            font-size: 1.55rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+            min-height: 52px;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
 
-        .metric-sub {
-            margin-top: 14px;
+        .vital-footer {
             font-size: 0.74rem;
-            color: var(--text-secondary);
+            color: var(--text-muted);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 12px;
             display: flex;
-            gap: 14px;
-            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
         }
 
-        .metric-sub span {
+        .vital-footer span b {
+            color: var(--text-body);
+        }
+
+        /* ─── REALTIME CHARTS SECTION ───────────────────────── */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 3fr 2fr;
+            gap: 16px;
+        }
+
+        .chart-box {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-header {
             display: flex;
             align-items: center;
-            gap: 5px;
+            justify-content: space-between;
+            margin-bottom: 16px;
         }
 
-        /* ─── SYSTEM DETAILS GRID ────────────────────── */
-        .details-grid {
+        .chart-title-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-title-group h3 {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-heading);
+            letter-spacing: -0.01em;
+        }
+
+        .chart-subtitle {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        .chart-canvas-wrap {
+            position: relative;
+            height: 180px;
+            width: 100%;
+        }
+
+        /* ─── TELEMETRY & DEVICE METRICS STRIP ──────────────── */
+        .telemetry-row {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 12px;
         }
 
-        .detail-box {
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
-            border-radius: var(--radius-md);
-            padding: 14px 16px;
-        }
-
-        .detail-box .title {
-            font-size: 0.68rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            font-weight: 700;
-            letter-spacing: 0.05em;
-        }
-
-        .detail-box .val {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-top: 4px;
-        }
-
-        /* ─── CHARTS ROW ─────────────────────────────── */
-        .charts-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-
-        .chart-card {
-            background: var(--glass-bg);
-            border: 1px solid var(--glass-border);
+        .telemetry-item {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
             border-radius: var(--radius-lg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            padding: 22px;
+            padding: 14px 18px;
         }
 
-        .chart-title {
-            font-size: 0.72rem;
-            font-weight: 700;
-            letter-spacing: 0.1em;
+        .telemetry-label {
+            font-size: 0.68rem;
+            font-weight: 600;
+            color: var(--text-muted);
             text-transform: uppercase;
-            color: var(--text-secondary);
-            margin-bottom: 16px;
+            letter-spacing: 0.04em;
+            margin-bottom: 4px;
+        }
+
+        .telemetry-val {
+            font-family: var(--font-mono);
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-heading);
+        }
+
+        /* ─── APP FOOTER ────────────────────────────────────── */
+        .app-footer {
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            padding: 6px 4px;
         }
 
-        .chart-title-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-        }
-
-        .chart-wrap {
-            position: relative;
-            height: 160px;
-        }
-
-        /* ─── MODAL EMAIL CẤU HÌNH GỌN GÀNG ───────────── */
+        /* ─── MODERN MODAL PANEL (APPLE / MACOS STYLE) ───────── */
         .modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(10px);
+            background: rgba(4, 8, 16, 0.75);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
             z-index: 1000;
             align-items: center;
             justify-content: center;
             padding: 20px;
         }
 
-        .modal-box {
-            background: #0f172a;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: var(--radius-lg);
-            max-width: 500px;
+        .modal-card {
+            background: #0f1628;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: var(--radius-xl);
+            max-width: 520px;
             width: 100%;
-            padding: 26px;
-            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+            padding: 28px;
+            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
         }
 
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
         }
 
         .modal-header h3 {
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             font-weight: 700;
-            color: #f8fafc;
+            color: var(--text-heading);
         }
 
-        .modal-close {
-            background: none;
+        .btn-close-modal {
+            background: transparent;
             border: none;
-            color: var(--text-secondary);
-            font-size: 1.5rem;
+            color: var(--text-muted);
+            font-size: 1.4rem;
             cursor: pointer;
+            line-height: 1;
+            padding: 4px;
+            border-radius: 6px;
         }
 
-        .form-group {
-            margin-bottom: 14px;
+        .btn-close-modal:hover {
+            color: var(--text-heading);
+            background: var(--bg-subtle);
         }
 
-        .form-group label {
-            display: block;
-            font-size: 0.75rem;
-            color: #94a3b8;
-            font-weight: 600;
-            margin-bottom: 6px;
+        .form-section {
+            margin-bottom: 16px;
+        }
+
+        .form-section-title {
+            font-size: 0.72rem;
+            font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 8px;
         }
 
-        .form-input {
+        .form-input-field {
             width: 100%;
             padding: 11px 14px;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 8px;
-            color: white;
-            font-size: 0.9rem;
+            background: #172138;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            color: var(--text-heading);
             font-family: inherit;
-        }
-
-        .form-input:focus {
+            font-size: 0.88rem;
             outline: none;
-            border-color: var(--blue);
+            transition: var(--transition);
         }
 
-        .form-help {
+        .form-input-field:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+
+        .form-tip {
             font-size: 0.72rem;
-            color: #64748b;
-            margin-top: 5px;
+            color: var(--text-muted);
+            margin-top: 6px;
             line-height: 1.4;
         }
 
-        .advanced-toggle {
-            font-size: 0.74rem;
+        .form-tip a {
             color: var(--blue);
-            cursor: pointer;
-            margin-top: 10px;
-            display: inline-block;
+            text-decoration: underline;
         }
 
-        .advanced-fields {
-            display: none;
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px dashed #334155;
-        }
-
-        .modal-footer {
+        .modal-actions {
             display: flex;
             justify-content: flex-end;
             gap: 10px;
-            margin-top: 20px;
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
         }
 
-        /* ─── FOOTER ─────────────────────────────────── */
-        .footer {
-            text-align: center;
-            font-size: 0.72rem;
-            color: var(--text-muted);
-            padding: 8px 0;
+        .btn-primary {
+            background: var(--emerald);
+            color: #04101c;
+            border: none;
+            padding: 10px 18px;
+            border-radius: var(--radius-md);
+            font-size: 0.8rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--transition);
         }
 
-        /* ─── RESPONSIVE ─────────────────────────────── */
-        @media (max-width: 768px) {
-            .hero, .charts-row { grid-template-columns: 1fr; }
-            .details-grid { grid-template-columns: 1fr 1fr; }
-            .metric-value { font-size: 2.8rem; }
-            .posture-card .metric-value { font-size: 1.8rem; }
+        .btn-primary:hover {
+            background: #34d399;
+        }
+
+        /* ─── RESPONSIVE BREAKPOINTS ────────────────────────── */
+        @media (max-width: 960px) {
+            .vitals-grid { grid-template-columns: 1fr; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .telemetry-row { grid-template-columns: 1fr 1fr; }
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 14px; }
+            .telemetry-row { grid-template-columns: 1fr; }
+            .app-header { flex-direction: column; align-items: flex-start; }
+            .value-large { font-size: 2.6rem; }
         }
     </style>
 </head>
 
 <body>
 
-    <div class="app">
+    <div class="container">
 
-        <!-- ── HEADER ──────────────────────────── -->
-        <header class="header">
-            <div class="header-brand">
-                <div class="logo-ring">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        <!-- ── TOP NAVIGATION & APP BRAND ────────────────── -->
+        <header class="app-header">
+            <div class="brand-section">
+                <div class="brand-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2 12h3l3-8 4 16 3-8h7" />
                     </svg>
                 </div>
-                <div class="brand-text">
-                    <h1>BREATH AI CLOUD</h1>
-                    <p>Giám Sát Hô Hấp &amp; Nhận Diện Tư Thế ESP32 • Cảnh Báo Té Ngã Tự Động</p>
+                <div class="brand-title">
+                    <h1>Respira Vitals</h1>
+                    <p>Giám sát hô hấp & phát hiện té ngã thời gian thực • ESP32</p>
                 </div>
             </div>
 
-            <div class="header-status">
-                <span class="badge badge-live">
-                    <span class="dot dot-pulse"></span>
-                    <span>ESP32 LIVE SENSOR</span>
-                </span>
-                <span class="badge badge-green" id="badge-model">
-                    <span id="badge-model-text">AI MODEL OK</span>
-                </span>
-                <span class="badge badge-blue">
-                    BUF: <b id="hdr-buffer">0</b>/500
-                </span>
-                <span class="badge" id="badge-audio-status" style="background:rgba(255,255,255,0.06);color:#94a3b8;">
-                    🔊 Âm thanh: BẬT
-                </span>
-                <span class="badge" style="background:rgba(255,255,255,0.06);color:#94a3b8;" id="hdr-time">—</span>
+            <div class="header-controls">
+                <div class="pill-badge live">
+                    <span class="pill-badge active-indicator"></span>
+                    <span>Cảm biến Trực tuyến</span>
+                </div>
+                <div class="pill-badge" id="badge-model">
+                    <span id="badge-model-text">AI Ready</span>
+                </div>
+                <div class="pill-badge" style="font-family: var(--font-mono);">
+                    BUF: <b id="hdr-buffer" style="color:var(--text-heading); margin-left:2px;">0</b>/500
+                </div>
+
+                <button class="btn-minimal active" id="btn-sound-toggle" onclick="toggleAudio()" title="Bật/Tắt chuông báo động">
+                    <svg id="sound-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                    </svg>
+                    <span id="sound-text">Âm thanh: Bật</span>
+                </button>
+
+                <button class="btn-minimal" onclick="openEmailModal()" title="Cài đặt thông báo qua Email">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                        <polyline points="22,6 12,13 2,6"></polyline>
+                    </svg>
+                    <span>Cài Đặt Email</span>
+                </button>
+
+                <button class="btn-minimal danger-test" onclick="triggerTestFall()" title="Giả lập kiểm tra cảnh báo khẩn cấp">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                    <span>Test Ngã</span>
+                </button>
             </div>
         </header>
 
-        <!-- ── BANNER CẢNH BÁO TÉ NGÃ KHẨN CẤP ─── -->
-        <div class="fall-alert-banner" id="fall-banner">
-            <div class="fall-content">
-                <div class="fall-info">
-                    <div class="fall-siren-icon">🚨</div>
-                    <div class="fall-text">
-                        <h2>PHÁT HIỆN SỰ CỐ TÉ NGÃ KHẨN CẤP!</h2>
+        <!-- Ẩn thẻ legacy badge-audio-status để không lỗi code cũ -->
+        <span id="badge-audio-status" style="display:none;"></span>
+        <span id="hdr-time" style="display:none;">—</span>
+
+        <!-- ── EMERGENCY FALL ALERT BANNER ───────────────── -->
+        <div class="fall-banner" id="fall-banner">
+            <div class="fall-banner-content">
+                <div class="fall-banner-left">
+                    <div class="fall-alert-icon-box">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                    </div>
+                    <div class="fall-banner-title">
+                        <h2>CẢNH BÁO: PHÁT HIỆN SỰ CỐ TÉ NGÃ!</h2>
                         <p>
-                            Thời gian: <b id="fall-alert-time">—</b> | 
-                            Va đập: <b id="fall-alert-impact" style="color:#ff6b6b;">—</b> | 
-                            Tư thế: <b id="fall-alert-posture" style="color:#fbbf24;">—</b> | 
+                            Thời gian: <b id="fall-alert-time">—</b> &bull; 
+                            Lực va đập: <b id="fall-alert-impact">—</b> &bull; 
+                            Tư thế: <b id="fall-alert-posture">—</b> &bull; 
                             Email: <span id="fall-alert-email-status">Đang gửi...</span>
                         </p>
                     </div>
                 </div>
-                <div class="fall-actions">
-                    <button class="btn-dismiss" onclick="dismissFallAlert()">
-                        <span>✓</span> ĐÃ KIỂM TRA / TẮT CÒI BÁO ĐỘNG
+                <div>
+                    <button class="btn-resolve-fall" onclick="dismissFallAlert()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span>Xác nhận an toàn / Tắt còi</span>
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- ── ACTIONS BAR THỰC TẾ (KHÔNG CÓ GIẢ LẬP) ─── -->
-        <div class="actions-bar">
-            <div class="actions-left">
-                <button class="action-btn" id="btn-sound-toggle" onclick="toggleAudio()">
-                    <span id="sound-icon">🔊</span> <span id="sound-text">Tắt Âm Thanh</span>
-                </button>
-                <button class="action-btn" onclick="openEmailModal()">
-                    <span>📧</span> Cài Đặt Email Người Nhận Cảnh Báo
-                </button>
-                <button class="action-btn danger" onclick="triggerTestFall()">
-                    <span>🚨</span> Thử Nghiệm Báo Động Té Ngã
-                </button>
+        <!-- ── PRIMARY HEALTH METRICS (APPLE HEALTH / OURA) ─ -->
+        <div class="vitals-grid">
+            <!-- 1. Nhịp Thở -->
+            <div class="vital-card">
+                <div>
+                    <div class="vital-card-header">
+                        <div class="vital-tag">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M6 12h12M12 6v12M8 8l8 8M16 8l-8 8" />
+                            </svg>
+                            <span>Nhịp Thở Sinh Học</span>
+                        </div>
+                        <span class="status-chip" id="respiratory-badge">Bình thường (12-20)</span>
+                    </div>
+
+                    <div class="vital-main-value">
+                        <span class="value-large" id="bpm-value">—</span>
+                        <span class="value-unit">nhịp / phút</span>
+                    </div>
+                </div>
+
+                <div class="vital-footer">
+                    <span>Mô hình: <b id="method">—</b> (Độ tin cậy: <b id="confidence">—</b>)</span>
+                    <span>Argmax: <b id="argmax-bpm">—</b></span>
+                </div>
             </div>
-            <div class="actions-right">
-                <span style="font-size:0.75rem; color:#94a3b8;">
-                    Nguồn dữ liệu: <b style="color:#10e68a;">Cảm biến MPU6050 trên chip ESP32</b>
-                </span>
+
+            <!-- 2. Tư Thế Cơ Thể -->
+            <div class="vital-card">
+                <div>
+                    <div class="vital-card-header">
+                        <div class="vital-tag">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="7" r="4" />
+                                <path d="M5.5 21v-2a6.5 6.5 0 0 1 13 0v2" />
+                            </svg>
+                            <span>Tư Thế Thân Người</span>
+                        </div>
+                        <span class="status-chip blue" id="signal-status">Đang theo dõi</span>
+                    </div>
+
+                    <div class="posture-display" id="posture-value">
+                        <span id="posture-icon" style="display:none;">⏳</span>
+                        <span id="posture-text">Đang nhận dữ liệu...</span>
+                    </div>
+                </div>
+
+                <div class="vital-footer">
+                    <span>Bộ đệm AI: <b id="buf-count">0</b>/500 mẫu</span>
+                    <span>Ước lượng FFT: <b id="fft-bpm">—</b></span>
+                </div>
+            </div>
+
+            <!-- 3. Giám Sát Té Ngã & An Toàn -->
+            <div class="vital-card">
+                <div>
+                    <div class="vital-card-header">
+                        <div class="vital-tag">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            </svg>
+                            <span>Trạng Thái Té Ngã</span>
+                        </div>
+                        <span class="status-chip" id="safety-status-chip">An toàn</span>
+                    </div>
+
+                    <div class="posture-display" style="font-size:1.35rem; color:var(--emerald);">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        <span>Không có sự cố ngã</span>
+                    </div>
+                </div>
+
+                <div class="vital-footer">
+                    <span>Nhận cảnh báo: <b id="email-receiver-val" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom;">Chưa cấu hình</b></span>
+                    <span>Độ trễ: <b>&lt; 50ms</b></span>
+                </div>
             </div>
         </div>
 
-        <!-- ── HERO METRICS ────────────────────── -->
-        <div class="hero">
-            <!-- Nhịp thở BPM -->
-            <div class="metric-card bpm-card">
-                <div class="metric-glow"></div>
-                <div class="metric-label">
-                    <span>🫁</span> Nhịp Thở Thực Tế (BPM)
+        <!-- ── REALTIME CHARTS ROW ────────────────────────── -->
+        <div class="charts-grid">
+            <!-- Respiratory Waveform -->
+            <div class="chart-box">
+                <div class="chart-header">
+                    <div class="chart-title-group">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                        </svg>
+                        <div>
+                            <h3>Sóng Hô Hấp Thời Gian Thực</h3>
+                            <div class="chart-subtitle">Biên độ lồng ngực qua gia tốc kế (Trục Z)</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="metric-value" id="bpm-value">—</div>
-                <div class="metric-sub">
-                    <span>Phương pháp: <b id="method" style="color:var(--text-primary)">—</b></span>
-                    <span>Argmax: <b id="argmax-bpm" style="color:var(--text-primary)">—</b></span>
-                    <span>Độ tin cậy: <b id="confidence" style="color:var(--text-primary)">—</b></span>
-                </div>
-            </div>
-
-            <!-- Tư thế Posture từ Chip -->
-            <div class="metric-card posture-card">
-                <div class="metric-glow"></div>
-                <div class="metric-label">
-                    <span>🧍‍♂️</span> Tư Thế Đo Từ Chip (Posture)
-                </div>
-                <div class="metric-value" id="posture-value">
-                    <span id="posture-icon">⏳</span>
-                    <span id="posture-text">CHỜ CHIP GỬI DỮ LIỆU</span>
-                </div>
-                <div class="metric-sub">
-                    <span>Trạng thái tín hiệu: <b id="signal-status" style="color:var(--text-primary)">—</b></span>
-                    <span>Bộ đệm AI: <b id="buf-count" style="color:var(--text-primary)">0</b>/500 mẫu</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- ── CHI TIẾT CẢM BIẾN & TÉ NGÃ ──────── -->
-        <div class="details-grid">
-            <div class="detail-box">
-                <div class="title">Gia Tốc Chip (ax, ay, az g)</div>
-                <div class="val" id="acc-values" style="font-size:0.92rem; font-family:monospace;">0.00 / 0.00 / 0.00</div>
-            </div>
-            <div class="detail-box">
-                <div class="title">Góc Quay Gyro (rad/s)</div>
-                <div class="val" id="gyro-values" style="font-size:0.92rem; font-family:monospace;">0.00 / 0.00 / 0.00</div>
-            </div>
-            <div class="detail-box">
-                <div class="title">Ước Lượng Phổ FFT</div>
-                <div class="val" id="fft-bpm" style="color:var(--yellow);">—</div>
-            </div>
-            <div class="detail-box">
-                <div class="title">Email Người Nhận Báo Động</div>
-                <div class="val" id="email-receiver-val" style="font-size:0.85rem; color:#93c5fd; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Chưa cấu hình</div>
-            </div>
-        </div>
-
-        <!-- ── BIỂU ĐỒ THỜI GIAN THỰC ───────────── -->
-        <div class="charts-row">
-            <div class="chart-card">
-                <div class="chart-title">
-                    <span class="chart-title-dot" style="background:var(--green);"></span>
-                    Sóng Tín Hiệu Thở Đo Từ Cảm Biến (Trục Z)
-                </div>
-                <div class="chart-wrap">
+                <div class="chart-canvas-wrap">
                     <canvas id="wave-chart"></canvas>
                 </div>
             </div>
 
-            <div class="chart-card">
-                <div class="chart-title">
-                    <span class="chart-title-dot" style="background:var(--purple);"></span>
-                    Phân Phối AI — 9 Lớp BPM (12 - 20 BPM)
+            <!-- AI Probability Distribution -->
+            <div class="chart-box">
+                <div class="chart-header">
+                    <div class="chart-title-group">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                        </svg>
+                        <div>
+                            <h3>Phổ Phân Phối AI</h3>
+                            <div class="chart-subtitle">Mô hình phân loại 9 khoảng tần số (12 - 20 BPM)</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="chart-wrap">
+                <div class="chart-canvas-wrap">
                     <canvas id="prob-chart"></canvas>
                 </div>
             </div>
         </div>
 
-        <div class="footer" id="footer-status">Hệ thống sẵn sàng nhận dữ liệu từ ESP32...</div>
+        <!-- ── HARDWARE SENSOR TELEMETRY STRIP ────────────── -->
+        <div class="telemetry-row">
+            <div class="telemetry-item">
+                <div class="telemetry-label">Gia Tốc Kế Trọng Lực (ax, ay, az)</div>
+                <div class="telemetry-val" id="acc-values">+0.00 / +0.00 / +0.00 g</div>
+            </div>
+            <div class="telemetry-item">
+                <div class="telemetry-label">Vận Tốc Góc Con Quay (gx, gy, gz)</div>
+                <div class="telemetry-val" id="gyro-values">+0.00 / +0.00 / +0.00 rad/s</div>
+            </div>
+            <div class="telemetry-item">
+                <div class="telemetry-label">Chu Kỳ Lấy Mẫu Cảm Biến</div>
+                <div class="telemetry-val">25 Hz &bull; 40ms / mẫu</div>
+            </div>
+            <div class="telemetry-item">
+                <div class="telemetry-label">Kênh Truyền Thông</div>
+                <div class="telemetry-val">Dual-Core Non-Blocking FreeRTOS</div>
+            </div>
+        </div>
 
-    </div><!-- /.app -->
+        <!-- ── FOOTER STATUS ─────────────────────────────── -->
+        <footer class="app-footer">
+            <div id="footer-status">Hệ thống sẵn sàng nhận dữ liệu từ cảm biến ESP32...</div>
+            <div>Respira Health Cloud &bull; v3.2 Production</div>
+        </footer>
 
-    <!-- ── MODAL CẤU HÌNH EMAIL GỬI & NHẬN BÁO ĐỘNG ─── -->
+    </div><!-- /.container -->
+
+    <!-- ── SETTINGS & NOTIFICATION MODAL (MACOS / IOS STYLE) ─ -->
     <div class="modal-overlay" id="email-modal">
-        <div class="modal-box" style="max-width: 540px;">
+        <div class="modal-card">
             <div class="modal-header">
-                <h3>📧 Cài Đặt Gửi Email Cảnh Báo Té Ngã</h3>
-                <button class="modal-close" onclick="closeEmailModal()">×</button>
+                <h3>Cấu Hình Thông Báo Khẩn Cấp</h3>
+                <button class="btn-close-modal" onclick="closeEmailModal()">&times;</button>
             </div>
 
             <!-- 1. Email người nhận -->
-            <div class="form-group">
-                <label style="color:#38bdf8; font-weight:700;">1. Email Người Nhận Cảnh Báo (Khẩn Cấp)</label>
-                <input type="email" id="cfg-receiver" class="form-input" placeholder="cuteo12042005@gmail.com" />
-                <div class="form-help">
-                    Hòm thư sẽ nhận thông báo khi có sự cố té ngã (ví dụ: cuteo12042005@gmail.com).
+            <div class="form-section">
+                <div class="form-section-title">1. Email Người Nhận Cảnh Báo Té Ngã</div>
+                <input type="email" id="cfg-receiver" class="form-input-field" placeholder="cuteo12042005@gmail.com" />
+                <div class="form-tip">
+                    Hòm thư của người thân, bác sĩ hoặc người chăm sóc nhận cảnh báo khi có sự cố ngã.
                 </div>
             </div>
 
-            <!-- 2. Tài khoản Gmail phát thư -->
-            <div style="margin-top:16px; padding:16px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px;">
-                <div style="font-size:0.76rem; color:#fbbf24; font-weight:700; margin-bottom:10px; display:flex; align-items:center; gap:6px;">
-                    <span>🔑</span> CẤU HÌNH TÀI KHOẢN GMAIL GỬI THƯ (BẮT BUỘC)
+            <!-- 2. Cấu hình gửi mail trực tiếp (Local Machine) -->
+            <div class="form-section">
+                <div class="form-section-title">2. Tài Khoản Gmail Gửi Thư (SMTP Local)</div>
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <input type="email" id="cfg-sender" class="form-input-field" placeholder="ant39278@gmail.com" />
+                    <input type="password" id="cfg-password" class="form-input-field" placeholder="Mật khẩu ứng dụng 16 ký tự Google" />
                 </div>
-
-                <div class="form-group">
-                    <label>2. Gmail Người Gửi (EMAIL_SENDER)</label>
-                    <input type="email" id="cfg-sender" class="form-input" placeholder="ten_cua_ban@gmail.com" />
-                    <div class="form-help">
-                        Bạn có thể dùng chính Gmail của mình (ví dụ cuteo12042005@gmail.com) để tự phát thư.
-                    </div>
-                </div>
-
-                <div class="form-group" style="margin-bottom:0;">
-                    <label>3. Mật Khẩu Ứng Dụng Google (16 Chữ Cái)</label>
-                    <input type="password" id="cfg-password" class="form-input" placeholder="Nhập 16 chữ cái (không phải mật khẩu đăng nhập)" />
-                    <div class="form-help" style="color:#93c5fd; margin-top:6px;">
-                        Google bắt buộc dùng Mật khẩu ứng dụng. Lấy tại:<br>
-                        👉 <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:#60a5fa; font-weight:bold; text-decoration:underline;">myaccount.google.com/apppasswords</a> (Yêu cầu đã bật Xác thực 2 bước).
-                    </div>
+                <div class="form-tip">
+                    Lấy mật khẩu 16 chữ cái tại: <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a>
                 </div>
             </div>
 
-            <!-- 3. Tùy chọn Google Apps Script Webhook cho Render Cloud Free -->
-            <div style="margin-top:14px; padding:12px; background:rgba(56, 189, 248, 0.05); border:1px dashed rgba(56, 189, 248, 0.25); border-radius:10px;">
-                <div style="font-size:0.75rem; color:#38bdf8; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:6px;">
-                    <span>🌐</span> DÀNH RIÊNG CHO RENDER CLOUD (BỎ QUA CHẶN CỔNG SMTP)
-                </div>
-                <div class="form-group" style="margin-bottom:0;">
-                    <label style="color:#94a3b8; font-size:0.7rem;">Google Apps Script Webhook URL (HTTPS Port 443)</label>
-                    <input type="url" id="cfg-script-url" class="form-input" placeholder="https://script.google.com/macros/s/.../exec" />
-                    <div class="form-help" style="font-size:0.68rem; color:#94a3b8; margin-top:4px;">
-                        Render Free chặn cổng 587. Dán URL Webhook Google Script vào đây sẽ gửi mail qua cổng 443 HTTPS không bao giờ bị chặn! (Để trống nếu dùng Local).
-                    </div>
+            <!-- 3. Tùy chọn Google Apps Script Webhook cho Render Cloud -->
+            <div class="form-section" style="margin-bottom:0;">
+                <div class="form-section-title">3. Webhook HTTPS Cổng 443 (Dành Cho Render Cloud Free)</div>
+                <input type="url" id="cfg-script-url" class="form-input-field" placeholder="https://script.google.com/macros/s/.../exec" />
+                <div class="form-tip">
+                    Render Cloud chặn cổng SMTP 587. Dán Google Script Webhook để gửi qua cổng 443 HTTPS không bao giờ bị chặn. (Để trống nếu chạy máy Local).
                 </div>
             </div>
 
-            <div class="modal-footer">
-                <button class="action-btn" onclick="testEmailConnection()">✉️ Gửi Thử Email Tới Người Nhận</button>
-                <button class="action-btn active" onclick="saveEmailConfig()">💾 Lưu Cài Đặt</button>
+            <div class="modal-actions">
+                <button class="btn-minimal" onclick="testEmailConnection()">Gửi Thử Email Xác Thực</button>
+                <button class="btn-primary" onclick="saveEmailConfig()">Lưu Cấu Hình</button>
             </div>
         </div>
     </div>
 
     <script>
         /* ────────────────────────────────────────────────────
-           AUDIO ALARM SYNTHESIZER (WEB AUDIO API)
+           AUDIO ALARM SYNTHESIZER (WEB AUDIO API + VIETNAMESE TTS)
         ──────────────────────────────────────────────────── */
         let audioCtx = null;
         let isAudioEnabled = true;
@@ -857,10 +922,12 @@
 
         function initAudio() {
             if (!audioCtx) {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                audioCtx = new AudioContext();
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    audioCtx = new AudioContextClass();
+                }
             }
-            if (audioCtx.state === 'suspended') {
+            if (audioCtx && audioCtx.state === 'suspended') {
                 audioCtx.resume();
             }
         }
@@ -947,35 +1014,28 @@
             const btn = document.getElementById('btn-sound-toggle');
             const icon = document.getElementById('sound-icon');
             const text = document.getElementById('sound-text');
-            const statusBadge = document.getElementById('badge-audio-status');
 
             if (isAudioEnabled) {
-                icon.textContent = '🔊';
-                text.textContent = 'Tắt Âm Thanh';
                 btn.classList.add('active');
-                statusBadge.textContent = '🔊 Âm thanh: BẬT';
-                statusBadge.style.color = 'var(--green)';
+                text.textContent = 'Âm thanh: Bật';
+                icon.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>';
             } else {
                 stopSiren();
-                icon.textContent = '🔇';
-                text.textContent = 'Bật Âm Thanh';
                 btn.classList.remove('active');
-                statusBadge.textContent = '🔇 Âm thanh: TẮT';
-                statusBadge.style.color = '#f87171';
+                text.textContent = 'Âm thanh: Tắt';
+                icon.innerHTML = '<line x1="1" y1="1" x2="23" y2="23"></line><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"></path><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line>';
             }
         }
 
         ['click', 'touchstart', 'keydown'].forEach(evt => {
-            window.addEventListener(evt, () => {
-                initAudio();
-            }, { once: false, passive: true });
+            window.addEventListener(evt, () => { initAudio(); }, { once: false, passive: true });
         });
 
         /* ────────────────────────────────────────────────────
-           CHART.JS SETUP
+           CHART.JS SETUP (APPLE HEALTH / WHOOP MINIMALIST STYLE)
         ──────────────────────────────────────────────────── */
-        Chart.defaults.color = '#7a8fb5';
-        Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+        Chart.defaults.color = '#64748b';
+        Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.04)';
         Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
 
         const BPM_CLASSES = [12, 13, 14, 15, 16, 17, 18, 19, 20];
@@ -983,9 +1043,9 @@
         const waveData = Array(WAVE_LEN).fill(null);
 
         const waveCtx = document.getElementById('wave-chart').getContext('2d');
-        const waveGrad = waveCtx.createLinearGradient(0, 0, 0, 160);
-        waveGrad.addColorStop(0, 'rgba(16, 230, 138, 0.35)');
-        waveGrad.addColorStop(1, 'rgba(16, 230, 138, 0)');
+        const waveGrad = waveCtx.createLinearGradient(0, 0, 0, 180);
+        waveGrad.addColorStop(0, 'rgba(16, 185, 129, 0.22)');
+        waveGrad.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
 
         const waveChart = new Chart(waveCtx, {
             type: 'line',
@@ -993,12 +1053,12 @@
                 labels: Array(WAVE_LEN).fill(''),
                 datasets: [{
                     data: waveData,
-                    borderColor: '#10e68a',
+                    borderColor: '#10b981',
                     backgroundColor: waveGrad,
                     borderWidth: 2,
                     pointRadius: 0,
                     fill: true,
-                    tension: 0.4
+                    tension: 0.35
                 }]
             },
             options: {
@@ -1008,8 +1068,8 @@
                     x: { display: false },
                     y: {
                         display: true,
-                        grid: { color: 'rgba(255,255,255,0.04)' },
-                        ticks: { maxTicksLimit: 5, font: { size: 10 } }
+                        grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                        ticks: { maxTicksLimit: 4, font: { size: 10, family: 'JetBrains Mono' } }
                     }
                 },
                 responsive: true,
@@ -1018,30 +1078,28 @@
         });
 
         const probCtx = document.getElementById('prob-chart').getContext('2d');
-        const probColors = BPM_CLASSES.map((_, i) => `hsl(${160 + i * 18}, 80%, 60%)`);
-
         const probChart = new Chart(probCtx, {
             type: 'bar',
             data: {
-                labels: BPM_CLASSES.map(b => b + ' BPM'),
+                labels: BPM_CLASSES.map(b => b + ' bpm'),
                 datasets: [{
                     data: Array(9).fill(0),
-                    backgroundColor: probColors.map(c => c.replace('60%', '40%').replace('hsl', 'hsla').replace(')', ', 0.7)')),
-                    borderColor: probColors,
-                    borderWidth: 2,
-                    borderRadius: 6,
+                    backgroundColor: 'rgba(59, 130, 246, 0.45)',
+                    borderColor: '#3b82f6',
+                    borderWidth: 1.5,
+                    borderRadius: 4,
                 }]
             },
             options: {
-                animation: { duration: 200 },
+                animation: { duration: 150 },
                 plugins: { legend: { display: false }, tooltip: { enabled: true } },
                 scales: {
                     x: { grid: { display: false }, ticks: { font: { size: 10 } } },
                     y: {
                         min: 0,
                         max: 1,
-                        grid: { color: 'rgba(255,255,255,0.04)' },
-                        ticks: { maxTicksLimit: 5, font: { size: 10 }, callback: v => (v * 100).toFixed(0) + '%' }
+                        grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                        ticks: { maxTicksLimit: 4, font: { size: 10, family: 'JetBrains Mono' }, callback: v => (v * 100).toFixed(0) + '%' }
                     }
                 },
                 responsive: true,
@@ -1050,34 +1108,34 @@
         });
 
         /* ────────────────────────────────────────────────────
-           POSTURE ICONS & STYLING MAP
+           POSTURE FORMATTING (CLEAN TEXT & ACCENT COLORS)
         ──────────────────────────────────────────────────── */
-        function getPostureInfo(p) {
+        function formatPosture(p) {
             const raw = (p || '').toLowerCase();
             if (raw.includes('úp mặt xuống bàn')) {
-                return { icon: '💻', text: 'Úp Mặt Xuống Bàn', color: '#f97316' };
+                return { text: 'Úp Mặt Xuống Bàn', color: '#f59e0b', chipClass: 'amber' };
             } else if (raw.includes('nằm ngửa')) {
-                return { icon: '🛏️', text: 'Nằm Ngửa', color: '#38bdf8' };
+                return { text: 'Nằm Ngửa', color: '#38bdf8', chipClass: 'blue' };
             } else if (raw.includes('nằm úp')) {
-                return { icon: '🛌', text: 'Nằm Úp (Sấp)', color: '#a78bfa' };
+                return { text: 'Nằm Úp (Sấp)', color: '#a78bfa', chipClass: 'blue' };
             } else if (raw.includes('nằm nghiêng trái')) {
-                return { icon: '↩️', text: 'Nằm Nghiêng Trái', color: '#818cf8' };
+                return { text: 'Nằm Nghiêng Trái', color: '#818cf8', chipClass: 'blue' };
             } else if (raw.includes('nằm nghiêng phải')) {
-                return { icon: '↪️', text: 'Nằm Nghiêng Phải', color: '#818cf8' };
+                return { text: 'Nằm Nghiêng Phải', color: '#818cf8', chipClass: 'blue' };
             } else if (raw.includes('nằm nghiêng')) {
-                return { icon: '🔄', text: 'Nằm Nghiêng', color: '#818cf8' };
+                return { text: 'Nằm Nghiêng', color: '#818cf8', chipClass: 'blue' };
             } else if (raw.includes('ngồi tựa lưng')) {
-                return { icon: '🛋️', text: 'Ngồi Tựa Lưng', color: '#34d399' };
+                return { text: 'Ngồi Tựa Lưng', color: '#34d399', chipClass: '' };
             } else if (raw.includes('đứng')) {
-                return { icon: '🧍', text: 'Đứng Thẳng', color: '#10e68a' };
+                return { text: 'Đứng Thẳng', color: '#10b981', chipClass: '' };
             } else if (raw.includes('ngồi')) {
-                return { icon: '🪑', text: 'Ngồi Thẳng', color: '#2dd4bf' };
+                return { text: 'Ngồi Thẳng', color: '#2dd4bf', chipClass: '' };
             }
-            return { icon: '⏳', text: 'CHỜ KẾT NỐI TỪ CHIP ESP32', color: '#7a8fb5' };
+            return { text: 'Chờ cảm biến gửi tín hiệu...', color: '#64748b', chipClass: 'blue' };
         }
 
         /* ────────────────────────────────────────────────────
-           MAIN POLLING LOOP (ĐỌC TRỰC TIẾP TỪ CHIP)
+           MAIN REAL-TIME DATA POLLING
         ──────────────────────────────────────────────────── */
         let lastAz = 0;
 
@@ -1086,56 +1144,64 @@
                 const r = await fetch('/current');
                 const d = await r.json();
 
-                // 1. Cập nhật BPM
-                document.getElementById('bpm-value').textContent = d.bpm ?? '—';
+                // 1. Cập nhật Nhịp thở BPM
+                const bpmVal = d.bpm ?? '—';
+                document.getElementById('bpm-value').textContent = bpmVal;
                 document.getElementById('argmax-bpm').textContent = d.argmax_bpm != null ? d.argmax_bpm + ' bpm' : '—';
                 document.getElementById('confidence').textContent = d.confidence != null ? (d.confidence * 100).toFixed(1) + '%' : '—';
                 document.getElementById('method').textContent = d.method ?? '—';
-                document.getElementById('signal-status').textContent = d.signal_status ?? '—';
+                
+                // Cập nhật trạng thái tín hiệu
+                const sigStatus = document.getElementById('signal-status');
+                sigStatus.textContent = d.signal_status ? d.signal_status.toUpperCase() : 'BÌNH THƯỜNG';
 
-                // 2. Cập nhật Tư thế chi tiết từ Chip
-                const pInfo = getPostureInfo(d.posture);
-                document.getElementById('posture-icon').textContent = pInfo.icon;
-                document.getElementById('posture-text').textContent = pInfo.text;
-                document.getElementById('posture-text').style.color = pInfo.color;
+                // 2. Cập nhật Tư thế
+                const pInfo = formatPosture(d.posture);
+                const postureEl = document.getElementById('posture-text');
+                postureEl.textContent = pInfo.text;
+                postureEl.style.color = pInfo.color;
 
-                // 3. Cập nhật Trục cảm biến & FFT
+                // 3. Cập nhật Giá trị Sensor Telemetry (ax, ay, az, gx, gy, gz)
                 document.getElementById('acc-values').textContent = 
-                    `${fmt(d.ax, 2)} / ${fmt(d.ay, 2)} / ${fmt(d.az, 2)}`;
+                    `${fmt(d.ax)} / ${fmt(d.ay)} / ${fmt(d.az)} g`;
                 document.getElementById('gyro-values').textContent = 
-                    `${fmt(d.gx, 2)} / ${fmt(d.gy, 2)} / ${fmt(d.gz, 2)}`;
+                    `${fmt(d.gx)} / ${fmt(d.gy)} / ${fmt(d.gz)} rad/s`;
                 document.getElementById('fft-bpm').textContent = d.fft_bpm != null ? d.fft_bpm + ' bpm' : '—';
 
-                // 4. Header & Buffer
+                // 4. Header & Buffer Counters
                 const buf = d.buffer_size ?? 0;
                 document.getElementById('buf-count').textContent = buf;
                 document.getElementById('hdr-buffer').textContent = buf;
-                document.getElementById('hdr-time').textContent = d.time ?? '—';
                 document.getElementById('footer-status').textContent =
-                    `Breath AI Cloud • Dữ liệu nhận từ chip: ${d.time ?? 'Chưa có'} • Bộ đệm: ${buf}/500 mẫu`;
+                    `Đồng bộ lúc: ${d.time ?? 'Chờ tín hiệu'} • Buffer: ${buf}/500 mẫu • 25 Hz Realtime`;
 
-                // 5. CẢNH BÁO TÉ NGÃ (FALL ALERT & SIREN)
+                // 5. CẢNH BÁO TÉ NGÃ KHẨN CẤP
                 const banner = document.getElementById('fall-banner');
+                const safetyChip = document.getElementById('safety-status-chip');
                 if (d.fall_alert === true) {
                     banner.style.display = 'block';
+                    safetyChip.textContent = 'CẢNH BÁO TÉ NGÃ';
+                    safetyChip.className = 'status-chip amber';
                     document.getElementById('fall-alert-time').textContent = d.fall_time || 'Vừa xong';
-                    document.getElementById('fall-alert-impact').textContent = (d.impact_g || '2.5') + ' G';
+                    document.getElementById('fall-alert-impact').textContent = (d.impact_g || '2.0') + ' G';
                     document.getElementById('fall-alert-posture').textContent = (d.posture || '').toUpperCase();
                     document.getElementById('fall-alert-email-status').textContent = d.email_status || 'Đang gửi...';
 
                     playSiren();
                 } else {
                     banner.style.display = 'none';
+                    safetyChip.textContent = 'An toàn';
+                    safetyChip.className = 'status-chip';
                     stopSiren();
                 }
 
-                // 6. Cập nhật Biểu đồ Xác suất 9 lớp
+                // 6. Cập nhật biểu đồ xác suất 9 lớp
                 if (Array.isArray(d.probabilities) && d.probabilities.length === 9) {
                     probChart.data.datasets[0].data = d.probabilities;
                     probChart.update();
                 }
 
-                // 7. Cập nhật Biểu đồ Sóng thở
+                // 7. Cập nhật biểu đồ sóng thở
                 const azVal = typeof d.az === 'number' ? d.az : lastAz;
                 lastAz = azVal;
                 waveData.push(azVal);
@@ -1150,7 +1216,7 @@
         }
 
         function fmt(v, dec = 2) {
-            if (v === null || v === undefined) return '0.00';
+            if (v === null || v === undefined) return '+0.00';
             if (typeof v === 'number') return (v >= 0 ? '+' : '') + v.toFixed(dec);
             return String(v);
         }
@@ -1182,23 +1248,19 @@
         }
 
         /* ────────────────────────────────────────────────────
-           TRIGGER TEST FALL EVENT
+           TRIGGER TEST FALL
         ──────────────────────────────────────────────────── */
         async function triggerTestFall() {
-            initAudio();
-            if (audioCtx && audioCtx.state === 'suspended') {
-                try { await audioCtx.resume(); } catch (e) {}
-            }
             try {
                 await fetch('/test_fall', { method: 'POST' });
                 updateData();
             } catch (e) {
-                console.error('Lỗi kích hoạt test ngã: ' + e);
+                console.error('Lỗi kích hoạt test ngã:', e);
             }
         }
 
         /* ────────────────────────────────────────────────────
-           EMAIL CONFIG MODAL (ĐƠN GIẢN HÓA CHO NGƯỜI NHẬN)
+           SETTINGS MODAL CONTROLLER
         ──────────────────────────────────────────────────── */
         async function openEmailModal() {
             document.getElementById('email-modal').style.display = 'flex';
@@ -1212,17 +1274,11 @@
                 if (scriptEl) scriptEl.value = d.GOOGLE_SCRIPT_URL || '';
             } catch (e) {
                 document.getElementById('cfg-receiver').value = 'cuteo12042005@gmail.com';
-                document.getElementById('cfg-sender').value = 'cuteo12042005@gmail.com';
             }
         }
 
         function closeEmailModal() {
             document.getElementById('email-modal').style.display = 'none';
-        }
-
-        function toggleAdvancedEmail() {
-            const el = document.getElementById('advanced-fields');
-            el.style.display = (el.style.display === 'block') ? 'none' : 'block';
         }
 
         async function saveEmailConfig() {
@@ -1233,7 +1289,7 @@
             const scriptUrl = scriptEl ? scriptEl.value.trim() : '';
 
             if (!receiver) {
-                alert('Vui lòng nhập Email người nhận cảnh báo (Ví dụ: cuteo12042005@gmail.com)!');
+                alert('Vui lòng nhập Email người nhận cảnh báo!');
                 return;
             }
 
@@ -1252,7 +1308,7 @@
                     body: JSON.stringify(payload)
                 });
                 const d = await r.json();
-                alert(d.message || 'Lưu cài đặt email thành công!');
+                alert(d.message || 'Lưu cài đặt thành công!');
                 document.getElementById('email-receiver-val').textContent = receiver;
                 closeEmailModal();
             } catch (e) {
@@ -1273,12 +1329,11 @@
             }
 
             if (!scriptUrl && (!sender || !password)) {
-                alert('⚠️ CHƯA CÓ THÔNG TIN GỬI EMAIL!\n\n1. Nếu chạy Local: Bạn cần nhập Gmail người gửi + Mật khẩu ứng dụng 16 ký tự.\n2. Nếu chạy trên Render Cloud: Bạn dán Google Apps Script Webhook URL (cổng 443 HTTPS không bị chặn).');
+                alert('⚠️ CHƯA CÓ THÔNG TIN GỬI EMAIL!\n\n1. Nếu chạy máy Local: Cần nhập Gmail người gửi + Mật khẩu ứng dụng 16 ký tự.\n2. Nếu chạy trên Render Cloud: Cần dán Google Apps Script Webhook URL (Port 443 HTTPS).');
                 return;
             }
 
             try {
-                // Tự động lưu cấu hình trước khi gửi test
                 const payload = {
                     ALERT_RECEIVER_EMAIL: receiver,
                     EMAIL_SENDER: sender,
