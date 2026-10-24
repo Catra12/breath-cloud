@@ -10,7 +10,8 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    <link
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
         rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
@@ -22,7 +23,7 @@
             --bg-card: #121a2d;
             --bg-card-hover: #162138;
             --bg-subtle: rgba(255, 255, 255, 0.03);
-            
+
             --border-subtle: rgba(255, 255, 255, 0.07);
             --border-hover: rgba(255, 255, 255, 0.16);
             --border-focus: #3b82f6;
@@ -36,7 +37,7 @@
             --emerald: #10b981;
             --emerald-subtle: rgba(16, 185, 129, 0.12);
             --emerald-border: rgba(16, 185, 129, 0.25);
-            
+
             --blue: #3b82f6;
             --blue-subtle: rgba(59, 130, 246, 0.12);
             --blue-border: rgba(59, 130, 246, 0.25);
@@ -59,7 +60,9 @@
             --transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        *, *::before, *::after {
+        *,
+        *::before,
+        *::after {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
@@ -211,8 +214,15 @@
         }
 
         @keyframes softPulse {
-            0%, 100% { border-color: rgba(244, 63, 94, 0.5); }
-            50% { border-color: rgba(244, 63, 94, 0.9); }
+
+            0%,
+            100% {
+                border-color: rgba(244, 63, 94, 0.5);
+            }
+
+            50% {
+                border-color: rgba(244, 63, 94, 0.9);
+            }
         }
 
         .fall-banner-content {
@@ -605,16 +615,36 @@
 
         /* ─── RESPONSIVE BREAKPOINTS ────────────────────────── */
         @media (max-width: 960px) {
-            .vitals-grid { grid-template-columns: 1fr; }
-            .charts-grid { grid-template-columns: 1fr; }
-            .telemetry-row { grid-template-columns: 1fr 1fr; }
+            .vitals-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .telemetry-row {
+                grid-template-columns: 1fr 1fr;
+            }
         }
 
         @media (max-width: 600px) {
-            body { padding: 14px; }
-            .telemetry-row { grid-template-columns: 1fr; }
-            .app-header { flex-direction: column; align-items: flex-start; }
-            .value-large { font-size: 2.6rem; }
+            body {
+                padding: 14px;
+            }
+
+            .telemetry-row {
+                grid-template-columns: 1fr;
+            }
+
+            .app-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .value-large {
+                font-size: 2.6rem;
+            }
         }
     </style>
 </head>
@@ -627,12 +657,13 @@
         <header class="app-header">
             <div class="brand-section">
                 <div class="brand-icon">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                        stroke-linecap="round" stroke-linejoin="round">
                         <path d="M2 12h3l3-8 4 16 3-8h7" />
                     </svg>
                 </div>
                 <div class="brand-title">
-                    <h1>Respira Vitals</h1>
+                    <h1>BreathAI Cloud</h1>
                     <p>Giám sát hô hấp & phát hiện té ngã thời gian thực • ESP32</p>
                 </div>
             </div>
@@ -649,8 +680,10 @@
                     BUF: <b id="hdr-buffer" style="color:var(--text-heading); margin-left:2px;">0</b>/500
                 </div>
 
-                <button class="btn-minimal active" id="btn-sound-toggle" onclick="toggleAudio()" title="Bật/Tắt chuông báo động">
-                    <svg id="sound-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <button class="btn-minimal active" id="btn-sound-toggle" onclick="toggleAudio()"
+                    title="Bật/Tắt chuông báo động">
+                    <svg id="sound-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                         <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                         <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
@@ -659,16 +692,21 @@
                 </button>
 
                 <button class="btn-minimal" onclick="openEmailModal()" title="Cài đặt thông báo qua Email">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
                         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
                         <polyline points="22,6 12,13 2,6"></polyline>
                     </svg>
                     <span>Cài Đặt Email</span>
                 </button>
 
-                <button class="btn-minimal danger-test" onclick="triggerTestFall()" title="Giả lập kiểm tra cảnh báo khẩn cấp">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <button class="btn-minimal danger-test" onclick="triggerTestFall()"
+                    title="Giả lập kiểm tra cảnh báo khẩn cấp">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
+                        </path>
                         <line x1="12" y1="9" x2="12" y2="13"></line>
                         <line x1="12" y1="17" x2="12.01" y2="17"></line>
                     </svg>
@@ -686,8 +724,9 @@
             <div class="fall-banner-content">
                 <div class="fall-banner-left">
                     <div class="fall-alert-icon-box">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                             <line x1="12" y1="8" x2="12" y2="12"></line>
                             <line x1="12" y1="16" x2="12.01" y2="16"></line>
                         </svg>
@@ -695,16 +734,17 @@
                     <div class="fall-banner-title">
                         <h2>CẢNH BÁO: PHÁT HIỆN SỰ CỐ TÉ NGÃ!</h2>
                         <p>
-                            Thời gian: <b id="fall-alert-time">—</b> &bull; 
-                            Lực va đập: <b id="fall-alert-impact">—</b> &bull; 
-                            Tư thế: <b id="fall-alert-posture">—</b> &bull; 
+                            Thời gian: <b id="fall-alert-time">—</b> &bull;
+                            Lực va đập: <b id="fall-alert-impact">—</b> &bull;
+                            Tư thế: <b id="fall-alert-posture">—</b> &bull;
                             Email: <span id="fall-alert-email-status">Đang gửi...</span>
                         </p>
                     </div>
                 </div>
                 <div>
                     <button class="btn-resolve-fall" onclick="dismissFallAlert()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                         <span>Xác nhận an toàn / Tắt còi</span>
@@ -720,7 +760,8 @@
                 <div>
                     <div class="vital-card-header">
                         <div class="vital-tag">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M6 12h12M12 6v12M8 8l8 8M16 8l-8 8" />
                             </svg>
                             <span>Nhịp Thở Sinh Học</span>
@@ -745,7 +786,8 @@
                 <div>
                     <div class="vital-card-header">
                         <div class="vital-tag">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="7" r="4" />
                                 <path d="M5.5 21v-2a6.5 6.5 0 0 1 13 0v2" />
                             </svg>
@@ -771,7 +813,8 @@
                 <div>
                     <div class="vital-card-header">
                         <div class="vital-tag">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                             </svg>
                             <span>Trạng Thái Té Ngã</span>
@@ -780,7 +823,8 @@
                     </div>
 
                     <div class="posture-display" style="font-size:1.35rem; color:var(--emerald);">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                         <span>Không có sự cố ngã</span>
@@ -788,7 +832,9 @@
                 </div>
 
                 <div class="vital-footer">
-                    <span>Nhận cảnh báo: <b id="email-receiver-val" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom;">Chưa cấu hình</b></span>
+                    <span>Nhận cảnh báo: <b id="email-receiver-val"
+                            style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:bottom;">Chưa
+                            cấu hình</b></span>
                     <span>Độ trễ: <b>&lt; 50ms</b></span>
                 </div>
             </div>
@@ -800,7 +846,8 @@
             <div class="chart-box">
                 <div class="chart-header">
                     <div class="chart-title-group">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--emerald)"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
                         </svg>
                         <div>
@@ -818,7 +865,8 @@
             <div class="chart-box">
                 <div class="chart-header">
                     <div class="chart-title-group">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <line x1="18" y1="20" x2="18" y2="10"></line>
                             <line x1="12" y1="20" x2="12" y2="4"></line>
                             <line x1="6" y1="20" x2="6" y2="14"></line>
@@ -885,19 +933,23 @@
                 <div class="form-section-title">2. Tài Khoản Gmail Gửi Thư (SMTP Local)</div>
                 <div style="display:flex; flex-direction:column; gap:10px;">
                     <input type="email" id="cfg-sender" class="form-input-field" placeholder="ant39278@gmail.com" />
-                    <input type="password" id="cfg-password" class="form-input-field" placeholder="Mật khẩu ứng dụng 16 ký tự Google" />
+                    <input type="password" id="cfg-password" class="form-input-field"
+                        placeholder="Mật khẩu ứng dụng 16 ký tự Google" />
                 </div>
                 <div class="form-tip">
-                    Lấy mật khẩu 16 chữ cái tại: <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a>
+                    Lấy mật khẩu 16 chữ cái tại: <a href="https://myaccount.google.com/apppasswords"
+                        target="_blank">myaccount.google.com/apppasswords</a>
                 </div>
             </div>
 
             <!-- 3. Tùy chọn Google Apps Script Webhook cho Render Cloud -->
             <div class="form-section" style="margin-bottom:0;">
                 <div class="form-section-title">3. Webhook HTTPS Cổng 443 (Dành Cho Render Cloud Free)</div>
-                <input type="url" id="cfg-script-url" class="form-input-field" placeholder="https://script.google.com/macros/s/.../exec" />
+                <input type="url" id="cfg-script-url" class="form-input-field"
+                    placeholder="https://script.google.com/macros/s/.../exec" />
                 <div class="form-tip">
-                    Render Cloud chặn cổng SMTP 587. Dán Google Script Webhook để gửi qua cổng 443 HTTPS không bao giờ bị chặn. (Để trống nếu chạy máy Local).
+                    Render Cloud chặn cổng SMTP 587. Dán Google Script Webhook để gửi qua cổng 443 HTTPS không bao giờ
+                    bị chặn. (Để trống nếu chạy máy Local).
                 </div>
             </div>
 
@@ -944,7 +996,7 @@
                 utter.rate = 1.0;
                 utter.volume = 1.0;
                 window.speechSynthesis.speak(utter);
-            } catch (e) {}
+            } catch (e) { }
         }
 
         async function playSiren() {
@@ -952,7 +1004,7 @@
             initAudio();
 
             if (audioCtx && audioCtx.state === 'suspended') {
-                try { await audioCtx.resume(); } catch (e) {}
+                try { await audioCtx.resume(); } catch (e) { }
             }
 
             try {
@@ -996,15 +1048,15 @@
                 try {
                     sirenOsc.stop();
                     sirenOsc.disconnect();
-                } catch (e) {}
+                } catch (e) { }
                 sirenOsc = null;
             }
             if (sirenGain) {
-                try { sirenGain.disconnect(); } catch (e) {}
+                try { sirenGain.disconnect(); } catch (e) { }
                 sirenGain = null;
             }
             if ('speechSynthesis' in window) {
-                try { window.speechSynthesis.cancel(); } catch (e) {}
+                try { window.speechSynthesis.cancel(); } catch (e) { }
             }
         }
 
@@ -1150,7 +1202,7 @@
                 document.getElementById('argmax-bpm').textContent = d.argmax_bpm != null ? d.argmax_bpm + ' bpm' : '—';
                 document.getElementById('confidence').textContent = d.confidence != null ? (d.confidence * 100).toFixed(1) + '%' : '—';
                 document.getElementById('method').textContent = d.method ?? '—';
-                
+
                 // Cập nhật trạng thái tín hiệu
                 const sigStatus = document.getElementById('signal-status');
                 sigStatus.textContent = d.signal_status ? d.signal_status.toUpperCase() : 'BÌNH THƯỜNG';
@@ -1162,9 +1214,9 @@
                 postureEl.style.color = pInfo.color;
 
                 // 3. Cập nhật Giá trị Sensor Telemetry (ax, ay, az, gx, gy, gz)
-                document.getElementById('acc-values').textContent = 
+                document.getElementById('acc-values').textContent =
                     `${fmt(d.ax)} / ${fmt(d.ay)} / ${fmt(d.az)} g`;
-                document.getElementById('gyro-values').textContent = 
+                document.getElementById('gyro-values').textContent =
                     `${fmt(d.gx)} / ${fmt(d.gy)} / ${fmt(d.gz)} rad/s`;
                 document.getElementById('fft-bpm').textContent = d.fft_bpm != null ? d.fft_bpm + ' bpm' : '—';
 
@@ -1210,7 +1262,7 @@
                 waveChart.update();
 
             } catch (e) {
-                document.getElementById('footer-status').textContent = 
+                document.getElementById('footer-status').textContent =
                     '⚠ Không thể kết nối tới server — ' + new Date().toLocaleTimeString();
             }
         }
@@ -1227,7 +1279,7 @@
                 const d = await r.json();
                 const receiver = d.ALERT_RECEIVER_EMAIL || '';
                 document.getElementById('email-receiver-val').textContent = receiver || 'Chưa cấu hình';
-            } catch (e) {}
+            } catch (e) { }
         }
 
         fetchInitialConfig();
